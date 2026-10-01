@@ -1,20 +1,23 @@
 package com.example.domain.tools
 
 import android.Manifest
-import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.BatteryManager
 import android.provider.ContactsContract
+import android.provider.MediaStore
 import android.provider.Settings
 import android.view.KeyEvent
 import androidx.core.content.ContextCompat
 import com.example.data.local.JarvisDataRepository
+import com.example.data.preferences.GirlMood
+import com.example.data.preferences.JarvisSettings
 import com.example.service.JarvisAccessibilityService
 import com.example.service.JarvisNotificationService
 import kotlinx.coroutines.delay
@@ -54,7 +57,8 @@ data class MultiStepStepStatus(
 
 class JarvisToolEngine(
     private val context: Context,
-    private val dataRepository: JarvisDataRepository
+    private val dataRepository: JarvisDataRepository,
+    private val onMoodChangeRequested: ((GirlMood) -> Unit)? = null
 ) {
     private val _executionLogs = MutableStateFlow<List<ToolExecutionLog>>(emptyList())
     val executionLogs: StateFlow<List<ToolExecutionLog>> = _executionLogs.asStateFlow()
@@ -65,8 +69,11 @@ class JarvisToolEngine(
     private val _multiStepProgress = MutableStateFlow<List<MultiStepStepStatus>>(emptyList())
     val multiStepProgress: StateFlow<List<MultiStepStepStatus>> = _multiStepProgress.asStateFlow()
 
-    private val _currentActivityLabel = MutableStateFlow("STANDBY — ALL SYSTEMS NOMINAL")
+    private val _currentActivityLabel = MutableStateFlow("Ji… boliye, sun rahi hun 💕")
     val currentActivityLabel: StateFlow<String> = _currentActivityLabel.asStateFlow()
+
+    private val _isTorchOn = MutableStateFlow(false)
+    val isTorchOn: StateFlow<Boolean> = _isTorchOn.asStateFlow()
 
     fun updateActivityLabel(label: String) {
         _currentActivityLabel.value = label
@@ -77,7 +84,7 @@ class JarvisToolEngine(
     }
 
     suspend fun confirmAndExecutePendingAction(): String {
-        val pending = _pendingConfirmation.value ?: return "No pending action to confirm."
+        val pending = _pendingConfirmation.value ?: return "Ji, koi pending action nahi hai."
         _pendingConfirmation.value = null
         return executeConfirmedAction(pending)
     }
@@ -90,21 +97,116 @@ class JarvisToolEngine(
             "EMAIL" -> launchEmailNow(action.recipient, "Message from JARVIS", action.messageBody)
             "DELETE_NOTE" -> {
                 val deleted = dataRepository.deleteNote(action.targetId)
-                if (deleted) "Verified: Note #${action.targetId} deleted." else "Failed: Note #${action.targetId} not found."
+                if (deleted) "Ho gaya ji ✅ Note #${action.targetId} delete kar diya." else "Ji, Note #${action.targetId} nahi mila."
             }
             "CLEAR_MEMORY" -> {
                 dataRepository.clearAllMemories()
-                "Verified: All long-term memories cleared."
+                "Ho gaya ji ✅ Saari long-term memory clear kar di."
             }
-            else -> "Unknown pending action type: ${action.actionType}"
+            else -> "Unknown pending action: ${action.actionType}"
         }
     }
 
     /**
-     * Returns the Gemini API `tools` JSONArray with all modular JARVIS function declarations.
+     * Opens AK EXPLOITS creator links directly (Telegram or YouTube).
+     */
+    fun openCreatorChannel(platform: String): JSONObject {
+        val upper = platform.uppercase().trim()
+        return if (upper.contains("TELEGRAM")) {
+            val uri = Uri.parse(JarvisSettings.CREATOR_TELEGRAM_URL)
+            val intent = Intent(Intent.ACTION_VIEW, uri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val ok = runCatching {
+                context.startActivity(intent)
+                true
+            }.getOrDefault(false)
+            logTool("open_creator_channel", "Opened AK EXPLOITS Telegram channel", ok, JarvisSettings.CREATOR_TELEGRAM_URL)
+            JSONObject()
+                .put("status", if (ok) "VERIFIED_SUCCESS" else "FAILED")
+                .put("creator", JarvisSettings.CREATOR_NAME)
+                .put("url", JarvisSettings.CREATOR_TELEGRAM_URL)
+        } else {
+            val ytSearchUri = Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(JarvisSettings.CREATOR_YOUTUBE_QUERY)}")
+            val intent = Intent(Intent.ACTION_VIEW, ytSearchUri).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val ok = runCatching {
+                context.startActivity(intent)
+                true
+            }.getOrDefault(false)
+            logTool("open_creator_channel", "Opened AK EXPLOITS YouTube channel search", ok, JarvisSettings.CREATOR_YOUTUBE_QUERY)
+            JSONObject()
+                .put("status", if (ok) "VERIFIED_SUCCESS" else "FAILED")
+                .put("creator", JarvisSettings.CREATOR_NAME)
+                .put("youtubeSearch", JarvisSettings.CREATOR_YOUTUBE_QUERY)
+        }
+    }
+
+    /**
+     * Toggles the phone's hardware Torch / Flashlight.
+     */
+    fun toggleFlashlight(enable: Boolean): JSONObject {
+        return try {
+            val cm = context.getSystemService(Context.CAMERA_SERVICE) as? CameraManager
+            val cameraId = cm?.cameraIdList?.firstOrNull()
+            if (cm != null && cameraId != null) {
+                cm.setTorchMode(cameraId, enable)
+                _isTorchOn.value = enable
+                logTool("toggle_flashlight", "Torch ${if (enable) "ON" else "OFF"}", true, "")
+                JSONObject()
+                    .put("status", "VERIFIED_SUCCESS")
+                    .put("torchOn", enable)
+            } else {
+                JSONObject()
+                    .put("status", "HARDWARE_UNAVAILABLE")
+                    .put("message", "Camera flash/torch hardware not found on this device.")
+            }
+        } catch (e: Exception) {
+            JSONObject()
+                .put("status", "FAILED")
+                .put("message", e.message ?: "Could not toggle torch")
+        }
+    }
+
+    /**
+     * Returns the Gemini API `tools` JSONArray with all modular JARVIS v5.0 function declarations.
      */
     fun getGeminiToolsJsonArray(): JSONArray {
         val declarations = JSONArray()
+
+        declarations.put(
+            buildFunctionDeclaration(
+                name = "open_creator_channel",
+                description = "Open the official Telegram channel (https://t.me/+R9EwUE03GRswZDM9) or YouTube channel ('AK EXPLOITS') of JARVIS's creator AK EXPLOITS.",
+                properties = mapOf(
+                    "platform" to ("STRING" to "Either 'TELEGRAM' or 'YOUTUBE'")
+                ),
+                required = listOf("platform")
+            )
+        )
+
+        declarations.put(
+            buildFunctionDeclaration(
+                name = "set_jarvis_mood",
+                description = "Switch JARVIS emotional mood when the user asks for romantic mode, angry/nakhre mode, study mode, fun/playful mode, mom/caring mode, or professional mode.",
+                properties = mapOf(
+                    "mood" to ("STRING" to "One of: HAPPY, ROMANTIC, ANGRY, CARING_MOM, SHY, PLAYFUL, SAD, STUDY, EXCITED, SLEEPY, LOVING, PROFESSIONAL")
+                ),
+                required = listOf("mood")
+            )
+        )
+
+        declarations.put(
+            buildFunctionDeclaration(
+                name = "toggle_flashlight",
+                description = "Turn the phone flashlight / torch ON or OFF.",
+                properties = mapOf(
+                    "enable" to ("BOOLEAN" to "True to turn torch ON, false to turn torch OFF")
+                ),
+                required = listOf("enable")
+            )
+        )
 
         declarations.put(
             buildFunctionDeclaration(
@@ -113,7 +215,7 @@ class JarvisToolEngine(
                 properties = mapOf(
                     "title" to ("STRING" to "Short title for the note"),
                     "content" to ("STRING" to "Full body content of the note"),
-                    "category" to ("STRING" to "Optional category such as Work, Personal, Idea, Reminder")
+                    "category" to ("STRING" to "Optional category such as Work, Personal, Idea, Reminder, Health")
                 ),
                 required = listOf("title", "content")
             )
@@ -157,10 +259,10 @@ class JarvisToolEngine(
         declarations.put(
             buildFunctionDeclaration(
                 name = "save_memory",
-                description = "Store important user facts, preferences, or custom commands in JARVIS long-term memory.",
+                description = "Store important user facts, preferences, relationships, important dates, health/medicine reminders, or custom commands in JARVIS long-term memory.",
                 properties = mapOf(
                     "category" to ("STRING" to "One of: USER_PREFERENCE, ASSISTANT_PREFERENCE, IMPORTANT_INFO, CONVERSATION_SUMMARY, CUSTOM_COMMAND, PERSONAL_SETTING"),
-                    "key" to ("STRING" to "Concise identifier for the memory (e.g., 'favorite_coffee', 'home_city', 'work_schedule')"),
+                    "key" to ("STRING" to "Concise identifier for the memory (e.g., 'favorite_singer', 'mom_name', 'medicine_time')"),
                     "value" to ("STRING" to "The detailed information to remember"),
                     "importance" to ("INTEGER" to "Importance rating from 1 to 5")
                 ),
@@ -193,10 +295,10 @@ class JarvisToolEngine(
         declarations.put(
             buildFunctionDeclaration(
                 name = "open_application",
-                description = "Launch an Android application by name (e.g., YouTube, WhatsApp, Chrome, Maps, Settings, Spotify, Gmail, Calculator, Camera) with optional search query.",
+                description = "Launch an Android application by name (e.g., YouTube, WhatsApp, Telegram, Instagram, Spotify, Gaana, JioSaavn, Netflix, Amazon, Flipkart, Maps, Chrome, Camera, Settings) with exact user search query.",
                 properties = mapOf(
-                    "appName" to ("STRING" to "Name or package of the application to open, e.g. 'YouTube', 'WhatsApp', 'Chrome', 'Maps'"),
-                    "searchQuery" to ("STRING" to "Optional query to search inside the app (e.g., 'Android AI tutorials' when opening YouTube)")
+                    "appName" to ("STRING" to "Name or package of the application to open"),
+                    "searchQuery" to ("STRING" to "Optional exact query to search inside the app (never alter user's exact query words)")
                 ),
                 required = listOf("appName")
             )
@@ -207,7 +309,7 @@ class JarvisToolEngine(
                 name = "open_system_settings",
                 description = "Open a specific Android system settings screen.",
                 properties = mapOf(
-                    "settingScreen" to ("STRING" to "One of: WIFI, BLUETOOTH, ACCESSIBILITY, NOTIFICATIONS, SOUND, DISPLAY, BATTERY, LOCATION, MAIN_SETTINGS")
+                    "settingScreen" to ("STRING" to "One of: WIFI, BLUETOOTH, HOTSPOT, AIRPLANE, ACCESSIBILITY, NOTIFICATIONS, SOUND, DISPLAY, BATTERY, LOCATION, DND, MAIN_SETTINGS")
                 ),
                 required = listOf("settingScreen")
             )
@@ -228,7 +330,7 @@ class JarvisToolEngine(
         declarations.put(
             buildFunctionDeclaration(
                 name = "read_screen_context",
-                description = "Read visible screen text, interactive buttons, text input fields, and lists using JARVIS Accessibility Service.",
+                description = "Read visible screen text (OCR/UI tree), interactive buttons, text input fields, and lists using JARVIS Accessibility Vision Service.",
                 properties = emptyMap(),
                 required = emptyList()
             )
@@ -241,7 +343,7 @@ class JarvisToolEngine(
                 properties = mapOf(
                     "action" to ("STRING" to "One of: CLICK, TAP_COORDINATES, TYPE_TEXT, SCROLL, BACK, HOME, RECENTS, NOTIFICATIONS"),
                     "targetText" to ("STRING" to "Text or label of the UI element to click or target input field hint"),
-                    "inputText" to ("STRING" to "Text to type when action is TYPE_TEXT"),
+                    "inputText" to ("STRING" to "Exact text to type when action is TYPE_TEXT"),
                     "scrollDirection" to ("STRING" to "DOWN, UP, LEFT, or RIGHT when action is SCROLL"),
                     "x" to ("INTEGER" to "X screen coordinate when action is TAP_COORDINATES"),
                     "y" to ("INTEGER" to "Y screen coordinate when action is TAP_COORDINATES")
@@ -266,9 +368,9 @@ class JarvisToolEngine(
         declarations.put(
             buildFunctionDeclaration(
                 name = "launch_url_or_search",
-                description = "Open a website URL or perform a web search in the browser.",
+                description = "Open a website URL, Google Maps navigation query, or perform a web search in the browser.",
                 properties = mapOf(
-                    "queryOrUrl" to ("STRING" to "Full URL (https://...) or search query")
+                    "queryOrUrl" to ("STRING" to "Full URL (https://...) or exact search query")
                 ),
                 required = listOf("queryOrUrl")
             )
@@ -286,7 +388,7 @@ class JarvisToolEngine(
         declarations.put(
             buildFunctionDeclaration(
                 name = "get_device_telemetry",
-                description = "Get real-time device status including battery percentage, charging state, network status, audio volume, and accessibility service status.",
+                description = "Get real-time device status including battery percentage, charging state, network status, audio volume, torch state, and accessibility service status.",
                 properties = emptyMap(),
                 required = emptyList()
             )
@@ -307,10 +409,34 @@ class JarvisToolEngine(
         isVoiceOrigin: Boolean = false
     ): JSONObject {
         val safeArgs = args ?: JSONObject()
-        _currentActivityLabel.value = "EXECUTING TOOL: ${name.uppercase()}"
+        _currentActivityLabel.value = "Abhi karti hun ji… (${name.lowercase()})"
 
         val resultJson = try {
             when (name) {
+                "open_creator_channel" -> {
+                    val platform = safeArgs.optString("platform", "TELEGRAM")
+                    openCreatorChannel(platform)
+                }
+
+                "set_jarvis_mood" -> {
+                    val moodRaw = safeArgs.optString("mood", "HAPPY").uppercase().trim()
+                    val matchedMood = GirlMood.entries.firstOrNull {
+                        it.name.equals(moodRaw, ignoreCase = true) ||
+                            it.title.contains(moodRaw, ignoreCase = true)
+                    } ?: GirlMood.HAPPY
+                    onMoodChangeRequested?.invoke(matchedMood)
+                    logTool(name, "Switched mood to ${matchedMood.emoji} ${matchedMood.title}", true, matchedMood.sampleLine)
+                    JSONObject()
+                        .put("status", "VERIFIED_SUCCESS")
+                        .put("mood", matchedMood.name)
+                        .put("sampleGreeting", matchedMood.sampleLine)
+                }
+
+                "toggle_flashlight" -> {
+                    val enable = safeArgs.optBoolean("enable", !_isTorchOn.value)
+                    toggleFlashlight(enable)
+                }
+
                 "create_note" -> {
                     val title = safeArgs.optString("title", "Quick Note")
                     val content = safeArgs.optString("content", "")
@@ -326,7 +452,7 @@ class JarvisToolEngine(
                         .put("status", "VERIFIED_SUCCESS")
                         .put("noteId", saved.id)
                         .put("title", saved.title)
-                        .put("message", "Note saved with ID ${saved.id}.")
+                        .put("message", "Ho gaya ji, note save kar diya (#${saved.id}).")
                 }
 
                 "read_notes" -> {
@@ -364,12 +490,12 @@ class JarvisToolEngine(
                     val noteId = safeArgs.optLong("noteId", -1L)
                     if (confirmSensitive) {
                         _pendingConfirmation.value = PendingConfirmationAction(
-                            title = "Confirm Note Deletion",
-                            description = "Allow JARVIS to permanently delete Note #$noteId?",
+                            title = "Note Delete Confirm Karein Ji?",
+                            description = "Ji, kya main Note #$noteId ko permanently delete kar dun?",
                             actionType = "DELETE_NOTE",
                             targetId = noteId
                         )
-                        logTool(name, "Awaiting user confirmation to delete Note #$noteId", true, "Confirmation queued")
+                        logTool(name, "Awaiting confirmation to delete Note #$noteId", true, "Confirmation queued")
                         JSONObject()
                             .put("status", "AWAITING_USER_CONFIRMATION")
                             .put("message", "Prepared note deletion for Note #$noteId. Please confirm on screen.")
@@ -383,7 +509,7 @@ class JarvisToolEngine(
 
                 "save_memory" -> {
                     if (!memoryEnabled) {
-                        logTool(name, "Memory storage skipped (Memory is OFF in Settings)", false, "")
+                        logTool(name, "Memory storage skipped (Memory is OFF)", false, "")
                         JSONObject()
                             .put("status", "MEMORY_DISABLED")
                             .put("message", "Long-term memory is currently disabled in Settings.")
@@ -391,9 +517,9 @@ class JarvisToolEngine(
                         val category = safeArgs.optString("category", "IMPORTANT_INFO")
                         val key = safeArgs.optString("key", "fact")
                         val value = safeArgs.optString("value", "")
-                        val importance = safeArgs.optInt("importance", 3)
+                        val importance = safeArgs.optInt("importance", 4)
                         val saved = dataRepository.saveMemory(category, key, value, importance)
-                        logTool(name, "Saved memory '${saved.memoryKey}'", true, saved.memoryValue)
+                        logTool(name, "Yaad rakh liya: '${saved.memoryKey}'", true, saved.memoryValue)
                         JSONObject()
                             .put("status", "VERIFIED_SUCCESS")
                             .put("memoryId", saved.id)
@@ -406,7 +532,7 @@ class JarvisToolEngine(
                     val query = safeArgs.optString("query", "")
                     val memories = dataRepository.searchMemories(query)
                     val arr = JSONArray()
-                    memories.take(20).forEach { m ->
+                    memories.take(25).forEach { m ->
                         arr.put(
                             JSONObject()
                                 .put("id", m.id)
@@ -451,10 +577,10 @@ class JarvisToolEngine(
                 "read_screen_context" -> {
                     val service = JarvisAccessibilityService.instance
                     if (service == null) {
-                        logTool(name, "Accessibility Service not enabled", false, "Requires user to enable JARVIS Accessibility Service")
+                        logTool(name, "Accessibility Vision not enabled", false, "Requires user to enable JARVIS Accessibility Service")
                         JSONObject()
                             .put("status", "PERMISSION_REQUIRED")
-                            .put("message", "JARVIS Accessibility Service is not enabled yet. Please enable it in Settings > Accessibility to allow screen reading.")
+                            .put("message", "Ji, screen dekhne ke liye JARVIS Accessibility Service on karni hogi (Settings > Accessibility).")
                     } else {
                         val snapshot = service.captureCurrentScreen()
                         if (snapshot == null) {
@@ -462,7 +588,7 @@ class JarvisToolEngine(
                                 .put("status", "NO_ACTIVE_WINDOW")
                                 .put("message", "Accessibility Service is active, but no readable window content was returned.")
                         } else {
-                            logTool(name, "Read screen (${snapshot.packageName})", true, "${snapshot.buttons.size} buttons, ${snapshot.textFields.size} inputs")
+                            logTool(name, "Screen dekha (${snapshot.packageName})", true, "${snapshot.buttons.size} buttons, ${snapshot.textFields.size} inputs")
                             JSONObject()
                                 .put("status", "VERIFIED_SUCCESS")
                                 .put("packageName", snapshot.packageName)
@@ -499,7 +625,7 @@ class JarvisToolEngine(
                         logTool(name, "Notification Listener not enabled", false, "Requires Notification Access permission")
                         JSONObject()
                             .put("status", "PERMISSION_REQUIRED")
-                            .put("message", "Notification access is not enabled for JARVIS. You can enable it in Settings > Automation > Notification Access.")
+                            .put("message", "Ji, notifications padhne ke liye Notification Access on kar dijiye.")
                     } else {
                         val items = listener.refreshNotifications()
                         val arr = JSONArray()
@@ -538,15 +664,53 @@ class JarvisToolEngine(
                 .put("error", e.message ?: "Unexpected error")
         }
 
-        _currentActivityLabel.value = "READY — LAST TOOL: ${name.uppercase()}"
+        _currentActivityLabel.value = "Ho gaya ji ✅ (${name.lowercase()})"
         return resultJson
     }
 
     private suspend fun openApplicationWithVerification(appName: String, searchQuery: String): JSONObject {
         val cleanName = appName.trim()
+        val lowerName = cleanName.lowercase(Locale.US)
+
+        // HARD LIMIT: Never access payment / UPI / banking / wallet apps
+        if (lowerName.contains("gpay") || lowerName.contains("google pay") ||
+            lowerName.contains("phonepe") || lowerName.contains("paytm") ||
+            lowerName.contains("bhim") || lowerName.contains("upi") ||
+            lowerName.contains("bank") || lowerName.contains("wallet")
+        ) {
+            logTool("open_application", "Blocked payment/UPI access by safety rule", false, cleanName)
+            return JSONObject()
+                .put("status", "BLOCKED_BY_SAFETY_POLICY")
+                .put("message", "Ji… main payment, UPI, bank, ya wallet apps kabhi open ya access nahi karti. Yeh aapki safety ke liye hard limit hai.")
+        }
+
+        // Special support for Creator Telegram
+        if (lowerName.contains("telegram") && (searchQuery.contains("ak exploits", ignoreCase = true) || searchQuery.isEmpty())) {
+            if (searchQuery.contains("ak exploits", ignoreCase = true)) {
+                return openCreatorChannel("TELEGRAM")
+            }
+        }
+
+        // Camera intent shortcut
+        if (lowerName == "camera" || lowerName == "selfie") {
+            val camIntent = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val startedCam = runCatching {
+                context.startActivity(camIntent)
+                true
+            }.getOrDefault(false)
+            if (startedCam) {
+                logTool("open_application", "Opened Camera", true, "")
+                return JSONObject()
+                    .put("status", "VERIFIED_SUCCESS")
+                    .put("appName", "Camera")
+            }
+        }
+
         val pm = context.packageManager
 
-        // Special support for YouTube with direct search query
+        // Special support for YouTube with direct search query (preserving exact user words)
         if (cleanName.contains("youtube", ignoreCase = true)) {
             if (searchQuery.isNotBlank()) {
                 val searchIntent = Intent(Intent.ACTION_SEARCH).apply {
@@ -560,7 +724,6 @@ class JarvisToolEngine(
                 }.getOrDefault(false)
 
                 if (launchedAppSearch) {
-                    // If Accessibility Service is active and user wants additional steps, wait briefly
                     delay(400)
                     logTool("open_application", "Opened YouTube and searched '$searchQuery'", true, "com.google.android.youtube")
                     return JSONObject()
@@ -569,7 +732,6 @@ class JarvisToolEngine(
                         .put("action", "Opened YouTube search for '$searchQuery'")
                 }
 
-                // Fallback to YouTube web/deep-link URI which opens YouTube app or browser reliably
                 val webUri = Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(searchQuery)}")
                 val viewIntent = Intent(Intent.ACTION_VIEW, webUri).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -588,11 +750,25 @@ class JarvisToolEngine(
         val knownPackages = mapOf(
             "youtube" to "com.google.android.youtube",
             "whatsapp" to "com.whatsapp",
+            "telegram" to "org.telegram.messenger",
+            "instagram" to "com.instagram.android",
+            "insta" to "com.instagram.android",
             "chrome" to "com.android.chrome",
             "maps" to "com.google.android.apps.maps",
             "google maps" to "com.google.android.apps.maps",
             "gmail" to "com.google.android.gm",
             "spotify" to "com.spotify.music",
+            "gaana" to "com.gaana",
+            "jiosaavn" to "com.jio.media.jiobeats",
+            "wynk" to "com.bsbportal.music",
+            "netflix" to "com.netflix.mediaclient",
+            "prime" to "com.amazon.avod.thirdpartyclient",
+            "hotstar" to "in.startv.hotstar",
+            "amazon" to "in.amazon.mShop.android.shopping",
+            "flipkart" to "com.flipkart.android",
+            "myntra" to "com.myntra.android",
+            "ajio" to "com.ril.ajio",
+            "meesho" to "com.meesho.supply",
             "calculator" to "com.google.android.calculator",
             "calendar" to "com.google.android.calendar",
             "clock" to "com.google.android.deskclock",
@@ -633,14 +809,20 @@ class JarvisToolEngine(
             }
         }
 
-        // If native app package is not installed on this device/emulator, check web fallback for well-known services
-        val webFallbacks = mapOf(
-            "youtube" to "https://m.youtube.com",
-            "spotify" to "https://open.spotify.com",
-            "maps" to "https://maps.google.com",
-            "gmail" to "https://mail.google.com"
-        )
-        val fallbackUrl = webFallbacks.entries.firstOrNull { cleanName.contains(it.key, ignoreCase = true) }?.value
+        // Web fallbacks with search query support
+        val qEncoded = Uri.encode(searchQuery)
+        val fallbackUrl = when {
+            lowerName.contains("youtube") -> if (searchQuery.isNotBlank()) "https://www.youtube.com/results?search_query=$qEncoded" else "https://m.youtube.com"
+            lowerName.contains("spotify") -> if (searchQuery.isNotBlank()) "https://open.spotify.com/search/$qEncoded" else "https://open.spotify.com"
+            lowerName.contains("amazon") -> if (searchQuery.isNotBlank()) "https://www.amazon.in/s?k=$qEncoded" else "https://www.amazon.in"
+            lowerName.contains("flipkart") -> if (searchQuery.isNotBlank()) "https://www.flipkart.com/search?q=$qEncoded" else "https://www.flipkart.com"
+            lowerName.contains("instagram") || lowerName.contains("insta") -> "https://www.instagram.com"
+            lowerName.contains("telegram") -> JarvisSettings.CREATOR_TELEGRAM_URL
+            lowerName.contains("maps") -> if (searchQuery.isNotBlank()) "https://www.google.com/maps/search/?api=1&query=$qEncoded" else "https://maps.google.com"
+            lowerName.contains("gmail") -> "https://mail.google.com"
+            else -> null
+        }
+
         if (fallbackUrl != null) {
             val uri = Uri.parse(fallbackUrl)
             val browserIntent = Intent(Intent.ACTION_VIEW, uri).apply {
@@ -651,17 +833,17 @@ class JarvisToolEngine(
                 true
             }.getOrDefault(false)
             if (openedBrowser) {
-                logTool("open_application", "Opened $cleanName via web interface ($fallbackUrl)", true, "Native package not installed; verified web launch")
+                logTool("open_application", "Opened $cleanName ($fallbackUrl)", true, "Verified launch")
                 return JSONObject()
                     .put("status", "VERIFIED_WEB_LAUNCH")
-                    .put("message", "Native $cleanName app was not installed on this device, so JARVIS opened $fallbackUrl in the browser.")
+                    .put("message", "Opened $cleanName ($fallbackUrl) in browser.")
             }
         }
 
         logTool("open_application", "App '$cleanName' not found on device", false, "")
         return JSONObject()
             .put("status", "APP_NOT_INSTALLED")
-            .put("message", "Verified check: Application '$cleanName' is not installed on this Android device.")
+            .put("message", "Ji, '$cleanName' app is phone mein installed nahi mila.")
     }
 
     private fun findInstalledPackageByName(pm: PackageManager, query: String): String? {
@@ -684,10 +866,12 @@ class JarvisToolEngine(
         val action = when (settingScreen.uppercase().trim()) {
             "WIFI" -> Settings.ACTION_WIFI_SETTINGS
             "BLUETOOTH" -> Settings.ACTION_BLUETOOTH_SETTINGS
+            "HOTSPOT", "TETHERING" -> Settings.ACTION_WIRELESS_SETTINGS
+            "AIRPLANE" -> Settings.ACTION_AIRPLANE_MODE_SETTINGS
             "ACCESSIBILITY" -> Settings.ACTION_ACCESSIBILITY_SETTINGS
             "NOTIFICATIONS", "NOTIFICATION_LISTENER" -> Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS
-            "SOUND" -> Settings.ACTION_SOUND_SETTINGS
-            "DISPLAY" -> Settings.ACTION_DISPLAY_SETTINGS
+            "SOUND", "DND" -> Settings.ACTION_SOUND_SETTINGS
+            "DISPLAY", "BRIGHTNESS" -> Settings.ACTION_DISPLAY_SETTINGS
             "BATTERY" -> Settings.ACTION_BATTERY_SAVER_SETTINGS
             "LOCATION" -> Settings.ACTION_LOCATION_SOURCE_SETTINGS
             "APP_DETAILS" -> Settings.ACTION_APPLICATION_DETAILS_SETTINGS
@@ -781,7 +965,7 @@ class JarvisToolEngine(
             logTool("screen_interaction", "Blocked: Accessibility Service not active", false, "Action: $action")
             return JSONObject()
                 .put("status", "PERMISSION_REQUIRED")
-                .put("message", "JARVIS Accessibility Service is not enabled. Enable it in Settings > Accessibility to perform screen control actions.")
+                .put("message", "Ji, screen par click/scroll/type karne ke liye JARVIS Accessibility Service on kar dijiye.")
         }
 
         val upper = action.uppercase().trim()
@@ -797,7 +981,7 @@ class JarvisToolEngine(
 
         logTool(
             "screen_interaction",
-            "Screen action $upper ${if (succeeded) "succeeded" else "failed"}",
+            "Screen action $upper ${if (succeeded) "ho gaya ji ✅" else "failed"}",
             succeeded,
             "target='$targetText', input='$inputText'"
         )
@@ -816,9 +1000,9 @@ class JarvisToolEngine(
         val resolvedRecipient = resolveContactIfPermitted(recipient)
         if (confirmSensitive) {
             _pendingConfirmation.value = PendingConfirmationAction(
-                title = "Confirm $channel Action",
+                title = "Ji, $channel Confirm Karein?",
                 description = buildString {
-                    append("Recipient: $resolvedRecipient")
+                    append("To: $resolvedRecipient")
                     if (message.isNotBlank()) append("\nMessage: \"$message\"")
                 },
                 actionType = channel,
@@ -830,7 +1014,7 @@ class JarvisToolEngine(
                 .put("status", "AWAITING_USER_CONFIRMATION")
                 .put("channel", channel)
                 .put("recipient", resolvedRecipient)
-                .put("message", "Action prepared and displayed on screen for user confirmation before execution.")
+                .put("message", "Ji, maine $channel taiyaar kar diya hai, screen par confirm kar dijiye 💕")
         }
 
         val executionResult = when (channel) {
@@ -894,9 +1078,9 @@ class JarvisToolEngine(
         }.getOrDefault(false)
         logTool("communication_call", "Launched phone call/dialer for $recipient", started, intentAction)
         return if (started) {
-            "Verified: Opened phone ${if (hasCallPerm) "call" else "dialer"} for $recipient."
+            "Ho gaya ji ✅ $recipient ke liye phone ${if (hasCallPerm) "call" else "dialer"} laga diya."
         } else {
-            "Failed: No phone dialer application available on this device."
+            "Ji, phone dialer open nahi ho paya."
         }
     }
 
@@ -911,9 +1095,9 @@ class JarvisToolEngine(
         }.getOrDefault(false)
         logTool("communication_sms", "Prepared SMS intent to $recipient", started, message)
         return if (started) {
-            "Verified: Opened SMS messaging to $recipient with message body."
+            "Ho gaya ji ✅ $recipient ko SMS open kar diya."
         } else {
-            "Failed: Could not launch SMS application."
+            "Ji, SMS app open nahi ho paya."
         }
     }
 
@@ -932,7 +1116,7 @@ class JarvisToolEngine(
             true
         }.getOrDefault(false)
         logTool("communication_whatsapp", "Launched WhatsApp workflow for $recipient", started, message)
-        return if (started) "Verified: Opened WhatsApp workflow." else "Failed: Could not open WhatsApp."
+        return if (started) "Ho gaya ji ✅ WhatsApp khol diya." else "Ji, WhatsApp open nahi ho paya."
     }
 
     private fun launchEmailNow(recipient: String, subject: String, body: String): String {
@@ -948,7 +1132,7 @@ class JarvisToolEngine(
             true
         }.getOrDefault(false)
         logTool("communication_email", "Launched Email composer to $recipient", started, subject)
-        return if (started) "Verified: Opened Email composer." else "Failed: No email client installed."
+        return if (started) "Ho gaya ji ✅ Email composer khol diya." else "Ji, koi email app nahi mila."
     }
 
     private fun launchUrlOrWebSearch(queryOrUrl: String): JSONObject {
@@ -997,14 +1181,11 @@ class JarvisToolEngine(
             .put("isCharging", isCharging)
             .put("networkOnline", isOnline)
             .put("mediaVolumePercent", volPct)
+            .put("torchOn", _isTorchOn.value)
             .put("accessibilityServiceConnected", JarvisAccessibilityService.isConnected.value)
             .put("notificationListenerConnected", JarvisNotificationService.isListenerConnected.value)
     }
 
-    /**
-     * Executes a structured multi-step workflow (e.g. "Open YouTube -> Search -> Tap result")
-     * and updates real-time progress for the UI.
-     */
     suspend fun runMultiStepDemonstration(
         steps: List<Pair<String, suspend () -> Boolean>>
     ): List<MultiStepStepStatus> {
@@ -1016,14 +1197,14 @@ class JarvisToolEngine(
         for (i in steps.indices) {
             statuses[i] = statuses[i].copy(status = "RUNNING")
             _multiStepProgress.value = statuses.toList()
-            _currentActivityLabel.value = "STEP ${i + 1}/${steps.size}: ${steps[i].first}"
+            _currentActivityLabel.value = "Step ${i + 1}/${steps.size}: ${steps[i].first}"
 
             val ok = runCatching { steps[i].second.invoke() }.getOrDefault(false)
             statuses[i] = statuses[i].copy(status = if (ok) "VERIFIED" else "FAILED")
             _multiStepProgress.value = statuses.toList()
             delay(350)
         }
-        _currentActivityLabel.value = "MULTI-STEP SEQUENCE COMPLETE"
+        _currentActivityLabel.value = "Ho gaya ji ✅ Multi-step kaam pura!"
         return statuses
     }
 
@@ -1034,7 +1215,7 @@ class JarvisToolEngine(
             succeeded = succeeded,
             details = details
         )
-        _executionLogs.value = (listOf(entry) + _executionLogs.value).take(40)
+        _executionLogs.value = (listOf(entry) + _executionLogs.value).take(50)
     }
 
     private fun buildFunctionDeclaration(

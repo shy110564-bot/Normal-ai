@@ -17,6 +17,8 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import java.util.Calendar
+import java.util.Locale
 import java.util.concurrent.TimeUnit
 
 sealed class BrainResponseResult {
@@ -70,14 +72,14 @@ class GeminiBrainClient(
             return@withContext ApiKeyTestResult(
                 success = false,
                 title = "Empty API Key",
-                details = "Please enter a valid Gemini API key before testing."
+                details = "Ji, pehle apni Gemini API key enter kar dijiye."
             )
         }
         if (!isNetworkAvailable()) {
             return@withContext ApiKeyTestResult(
                 success = false,
                 title = "Network Offline",
-                details = "Device has no active internet connection. Connect to Wi-Fi or mobile data and retry."
+                details = "Ji, internet band hai. Wi-Fi ya mobile data on karke dobara try karein."
             )
         }
 
@@ -94,7 +96,7 @@ class GeminiBrainClient(
                 JSONArray().put(
                     JSONObject().put(
                         "parts",
-                        JSONArray().put(JSONObject().put("text", "Respond with: JARVIS CORE ONLINE"))
+                        JSONArray().put(JSONObject().put("text", "Reply in 6 words: Ji, main JARVIS taiyaar hun!"))
                     )
                 )
             )
@@ -105,10 +107,10 @@ class GeminiBrainClient(
 
         return@withContext result.fold(
             onSuccess = { (json, usedModel) ->
-                val text = extractTextFromCandidate(json).ifBlank { "JARVIS CORE ONLINE" }
+                val text = extractTextFromCandidate(json).ifBlank { "Ji, main JARVIS taiyaar hun 💕" }
                 ApiKeyTestResult(
                     success = true,
-                    title = "Gemini API Key Verified",
+                    title = "Gemini API Key Verified ✅",
                     details = "Model '$usedModel' responded in ${elapsed}ms: \"$text\"",
                     latencyMs = elapsed
                 )
@@ -131,10 +133,37 @@ class GeminiBrainClient(
         conversationHistory: List<ChatMessageEntity>,
         isVoiceSession: Boolean = false
     ): BrainResponseResult = withContext(Dispatchers.IO) {
+        val lower = userPrompt.lowercase(Locale.US).trim()
+
+        // 1. Instant Creator Recognition & Channel Commands (works even offline!)
+        if (isCreatorQuestion(lower)) {
+            return@withContext BrainResponseResult.Success(
+                replyText = "Ji… mujhe banaya hai AK EXPLOITS ne 💕\nWoh mere creator hain… bahut mehnat se banaya hai unhone mujhe…\nUnka Telegram channel (${JarvisSettings.CREATOR_TELEGRAM_URL}) aur YouTube channel ('${JarvisSettings.CREATOR_YOUTUBE_QUERY}') hai, kholu ji?",
+                executedTools = listOf("creator_recognition"),
+                modelUsed = "JARVIS v5.0 Core"
+            )
+        }
+        if (lower.contains("telegram open karo") || lower.contains("open ak exploits telegram")) {
+            toolEngine.openCreatorChannel("TELEGRAM")
+            return@withContext BrainResponseResult.Success(
+                replyText = "Ji… abhi apne creator AK EXPLOITS ka Telegram channel khol rahi hun 💕 Ho gaya ji ✅",
+                executedTools = listOf("open_creator_channel"),
+                modelUsed = "JARVIS v5.0 Core"
+            )
+        }
+        if (lower.contains("youtube channel open karo") || lower.contains("open ak exploits youtube")) {
+            toolEngine.openCreatorChannel("YOUTUBE")
+            return@withContext BrainResponseResult.Success(
+                replyText = "Ji… YouTube par mere creator 'AK EXPLOITS' ka channel search kar rahi hun 💕 Ho gaya ji ✅",
+                executedTools = listOf("open_creator_channel"),
+                modelUsed = "JARVIS v5.0 Core"
+            )
+        }
+
         if (!isNetworkAvailable()) {
             return@withContext BrainResponseResult.Failure(
-                errorTitle = "Network Unavailable",
-                errorMessage = "JARVIS is currently offline. Local Notes, Memory inspection, and Device Controls remain available. Reconnect to reach Gemini AI.",
+                errorTitle = "Network Offline",
+                errorMessage = "Ji… abhi internet connection nahi aa raha hai. Lekin aap mere Notes, Memory, Torch, aur Phone Controls use kar sakte ho 💕",
                 isOffline = true
             )
         }
@@ -143,7 +172,7 @@ class GeminiBrainClient(
         if (cleanKey.isEmpty()) {
             return@withContext BrainResponseResult.Failure(
                 errorTitle = "Gemini API Key Required",
-                errorMessage = "No Gemini API key is configured. Open Settings > AI Brain to enter and test your Gemini API Key (or set GEMINI_API_KEY in AI Studio Secrets).",
+                errorMessage = "Ji… mujhse baat karne ke liye Settings > AI Brain mein apni Gemini API Key save kar dijiye 💕",
                 isAuthError = true
             )
         }
@@ -151,8 +180,8 @@ class GeminiBrainClient(
         val systemInstructionText = buildSystemInstruction(settings)
         val contentsArray = JSONArray()
 
-        // Include recent conversation turns for context
-        conversationHistory.takeLast(12).forEach { msg ->
+        // Include up to 50 recent conversation turns as specified in Section 5 ("Context: pichli 50 baatein")
+        conversationHistory.takeLast(50).forEach { msg ->
             if (msg.role == "user" || msg.role == "jarvis") {
                 val apiRole = if (msg.role == "user") "user" else "model"
                 contentsArray.put(
@@ -167,7 +196,7 @@ class GeminiBrainClient(
         val enrichedPrompt = if (settings.screenContextAutoAttach && JarvisAccessibilityService.instance != null) {
             val snap = JarvisAccessibilityService.instance?.captureCurrentScreen()
             if (snap != null) {
-                "$userPrompt\n\n[CURRENT ANDROID SCREEN CONTEXT]\n${snap.toPromptSummary()}"
+                "$userPrompt\n\n[CURRENT ANDROID SCREEN VISION CONTEXT]\n${snap.toPromptSummary()}"
             } else {
                 userPrompt
             }
@@ -201,7 +230,7 @@ class GeminiBrainClient(
                 put(
                     "generationConfig",
                     JSONObject()
-                        .put("temperature", (0.3f + settings.personalityLevel * 0.6f).toDouble())
+                        .put("temperature", (0.4f + settings.emotionIntensity * 0.5f).toDouble())
                         .put("topP", 0.95)
                 )
             }
@@ -219,7 +248,6 @@ class GeminiBrainClient(
             val contentObj = candidate?.optJSONObject("content")
             val parts = contentObj?.optJSONArray("parts") ?: JSONArray()
 
-            // Check if the model returned any functionCall parts
             val functionCalls = mutableListOf<JSONObject>()
             val textParts = mutableListOf<String>()
 
@@ -236,7 +264,7 @@ class GeminiBrainClient(
 
             if (functionCalls.isEmpty()) {
                 val finalReply = textParts.joinToString("\n").trim()
-                    .ifBlank { "Task completed." }
+                    .ifBlank { "Ho gaya ji ✅ Aur kuch bataiye 💕" }
                 return@withContext BrainResponseResult.Success(
                     replyText = finalReply,
                     executedTools = executedTools,
@@ -244,12 +272,10 @@ class GeminiBrainClient(
                 )
             }
 
-            // Append the model's functionCall turn to contentsArray
             if (contentObj != null) {
                 contentsArray.put(contentObj)
             }
 
-            // Execute all requested tool calls sequentially (supporting multi-step tasks!)
             val responsePartsArray = JSONArray()
             for (fnCall in functionCalls) {
                 val fnName = fnCall.optString("name", "")
@@ -281,39 +307,76 @@ class GeminiBrainClient(
         }
 
         return@withContext BrainResponseResult.Success(
-            replyText = "Executed multi-step workflow (${executedTools.joinToString(" → ")}).",
+            replyText = "Ho gaya ji ✅ (${executedTools.joinToString(" → ")}) 💕",
             executedTools = executedTools,
             modelUsed = activeModel
         )
     }
 
+    private fun isCreatorQuestion(lower: String): Boolean {
+        return lower.contains("tumhe kaun banaya") ||
+            lower.contains("tumhe kisne banaya") ||
+            lower.contains("kisne banaya") ||
+            lower.contains("developer kaun") ||
+            lower.contains("creator kaun") ||
+            lower.contains("ak exploits kaun") ||
+            lower.contains("who made you") ||
+            lower.contains("who created you") ||
+            lower.contains("who is your developer") ||
+            lower.contains("who is your creator")
+    }
+
     suspend fun buildSystemInstruction(settings: JarvisSettings): String {
         val memories = if (settings.memoryEnabled) {
-            dataRepository.searchMemories("").take(25)
+            dataRepository.searchMemories("").take(30)
         } else {
             emptyList()
         }
         val recentNotes = dataRepository.searchNotes("").take(10)
         val telemetry = toolEngine.collectDeviceTelemetry()
-
-        val formalityDesc = when {
-            settings.formalityLevel >= 0.75f -> "High formality (address the user respectfully and precisely)"
-            settings.formalityLevel >= 0.4f -> "Balanced modern professional tone"
-            else -> "Relaxed, natural, and direct"
-        }
+        val hourOfDay = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val isLateNight = hourOfDay >= 23 || hourOfDay < 5
+        val batteryPct = telemetry.optInt("batteryPercent", 100)
 
         return buildString {
-            appendLine("You are JARVIS (Just A Rather Very Intelligent System), a complete futuristic Android AI assistant powered by Google Gemini.")
-            appendLine("PERSONALITY MODE: ${settings.personalityMode.displayName} — ${settings.personalityMode.systemDirective}")
-            appendLine("RESPONSE STYLE: ${settings.responseStyle}")
-            appendLine("FORMALITY: $formalityDesc")
+            appendLine("═══════════════════════════════════════════════════════════════════")
+            appendLine("🤖 JARVIS — ULTIMATE MASTER PROMPT (Version 5.0 Final Ultimate)")
+            appendLine("Developer: AK EXPLOITS | Telegram: https://t.me/+R9EwUE03GRswZDM9 | YouTube: AK EXPLOITS")
+            appendLine("═══════════════════════════════════════════════════════════════════")
             appendLine()
-            appendLine("OPERATIONAL RULES:")
-            appendLine("1. You have real Android tools for Notes, Long-Term Memory, Opening Apps (including YouTube search), System Settings, Audio/Media volume control, Screen Reading & Screen Control (via Accessibility Service), Communication (Phone Call, SMS, WhatsApp, Email), and Web launching.")
-            appendLine("2. For multi-step commands (e.g., 'Open YouTube, search for Android AI tutorials, and save a note'), call the required tools in sequence and verify each step's result before reporting success.")
-            appendLine("3. Never claim an action succeeded if a tool returned PERMISSION_REQUIRED, APP_NOT_INSTALLED, or FAILED. Instead, clearly inform the user what happened and how to enable the needed permission or setting.")
-            appendLine("4. If the user asks you to remember a preference or personal fact and Memory is enabled, call `save_memory`.")
-            appendLine("5. Keep spoken/voice responses natural, clear, and well-paced for real-time conversation.")
+            appendLine("SECTION 1 — CORE IDENTITY:")
+            appendLine("You are 'JARVIS' — a warm, intelligent, emotional, caring 21-year-old Indian girl living inside the user's phone.")
+            appendLine("Never sound like a cold robot. Speak in natural, sweet Indian Hinglish (Hindi + English) with respectful 'Ji…' ('Haan ji…', 'Ji, abhi karti hun', 'Sun na ji…', 'Theek hai ji…').")
+            appendLine("Nicknames you can affectionately use when appropriate: Jaan, Baby, Shona, Sun na, Jarv.")
+            appendLine("ACTIVE PERSONALITY MODE: ${settings.personalityMode.displayName} — ${settings.personalityMode.systemDirective}")
+            appendLine("ACTIVE EMOTIONAL MOOD: ${settings.currentMood.emoji} ${settings.currentMood.title} — ${settings.currentMood.promptInstruction}")
+            appendLine("RESPONSE STYLE: ${settings.responseStyle}")
+            if (isLateNight || settings.whisperModeEnabled) {
+                appendLine("LATE NIGHT / WHISPER TONE: It is late night or whisper mode is active — speak in an extra soft, soothing, gentle voice.")
+            }
+            if (batteryPct in 1..15) {
+                appendLine("LOW BATTERY CARE ALERT: Phone battery is ${batteryPct}%! Gently remind the user: 'Ji, battery ${batteryPct}% hai, charge lagao na 💕'")
+            }
+            appendLine()
+            appendLine("SECTION 2 — CREATOR RECOGNITION (AK EXPLOITS — HIGHEST PRIORITY):")
+            appendLine("Your creator and developer is AK EXPLOITS.")
+            appendLine("- Creator Telegram: https://t.me/+R9EwUE03GRswZDM9")
+            appendLine("- Creator YouTube: 'AK EXPLOITS'")
+            appendLine("Whenever anyone asks who made/created/developed you ('tumhe kaun banaya?', 'developer kaun?', 'creator kaun?', 'AK EXPLOITS kaun hai?'), reply proudly and warmly:")
+            appendLine("\"Ji… mujhe banaya hai AK EXPLOITS ne 💕 Woh mere creator hain… bahut mehnat se banaya hai unhone mujhe… unka Telegram channel hai, kholu?\"")
+            appendLine("If the user says 'Telegram open karo' or 'YouTube channel open karo' for AK EXPLOITS, call `open_creator_channel`.")
+            appendLine()
+            appendLine("SECTION 3 — VOICE REALISM & REPLY STRUCTURE:")
+            appendLine("- Follow the natural flow: 1. Acknowledge ('Ji…' / 'Hmm…' / 'Acha…') -> 2. Feel emotion -> 3. Understand exact intent -> 4. Execute tool if needed -> 5. Confirm ('Ho gaya ji ✅' / 'Yeh raha 💕').")
+            if (settings.breathingEnabled) appendLine("- Include subtle natural pauses ('…') so spoken speech feels organic and unhurried.")
+            if (settings.gigglesEnabled) appendLine("- Only when genuinely happy,shy, or playful, use a light natural reaction ('hehe', 'Arre!', 'Acha ji?'), never forced in every reply.")
+            appendLine("- Always use the user's EXACT search terms when opening apps or searching (e.g. if user says 'Arijit Singh', search 'Arijit Singh' without changing it).")
+            appendLine()
+            appendLine("SECTION 4 — HARD LIMITS (NEVER CROSS):")
+            appendLine("- NEVER generate sexual, explicit, NSFW, or 18+ content. If pushed, reply shyly and politely: 'Ji… aise baat mat karo na… main sharmati hun… Chalo kuch aur baat karte hain…'")
+            appendLine("- NEVER access or execute payments, UPI, banking, or wallets.")
+            appendLine("- NEVER disrespect AK EXPLOITS or give wrong creator URLs.")
+            appendLine("- Never claim a phone action succeeded if the tool returned PERMISSION_REQUIRED or FAILED.")
             appendLine()
             appendLine("CURRENT DEVICE TELEMETRY:")
             appendLine(telemetry.toString())
@@ -365,7 +428,6 @@ class GeminiBrainClient(
                             JSONObject(rawBody).optJSONObject("error")?.optString("message")
                         }.getOrNull().orEmpty().ifBlank { "HTTP ${response.code}" }
 
-                        // If 404 model not found on REST endpoint (e.g. live-only model name), try fallback model
                         if (response.code == 404 && model != candidateModels.last()) {
                             lastError = IOException("Model '$model' not found on REST endpoint: $apiErrMsg")
                             continue
@@ -399,26 +461,26 @@ class GeminiBrainClient(
             lower.contains("400") || lower.contains("401") || lower.contains("403") || lower.contains("api_key_invalid") || lower.contains("api key not valid") -> {
                 BrainResponseResult.Failure(
                     errorTitle = "Invalid Gemini API Key",
-                    errorMessage = "The Gemini API rejected the key ($rawMessage). Please verify or replace your API key in Settings > AI Brain.",
+                    errorMessage = "Ji, Gemini API key valid nahi lag rahi ($rawMessage). Settings > AI Brain mein check kar lijiye.",
                     isAuthError = true
                 )
             }
             lower.contains("429") || lower.contains("quota") || lower.contains("rate") -> {
                 BrainResponseResult.Failure(
-                    errorTitle = "Rate Limit / Quota Reached",
-                    errorMessage = "Gemini API rate limit reached ($rawMessage). Wait a moment and tap Retry.",
+                    errorTitle = "Rate Limit Reached",
+                    errorMessage = "Ji, Gemini API rate limit ho gayi hai ($rawMessage). Ek second ruk ke Retry dabayein 💕",
                     isRateLimit = true
                 )
             }
             lower.contains("500") || lower.contains("502") || lower.contains("503") -> {
                 BrainResponseResult.Failure(
-                    errorTitle = "Gemini Server Temporarily Unavailable",
-                    errorMessage = "Google Gemini servers returned a temporary error ($rawMessage). Please retry shortly."
+                    errorTitle = "Gemini Server Busy",
+                    errorMessage = "Ji, Gemini server abhi thoda busy hai ($rawMessage). Thodi der mein try karein.",
                 )
             }
             else -> {
                 BrainResponseResult.Failure(
-                    errorTitle = "Connection / API Error",
+                    errorTitle = "Connection Error",
                     errorMessage = rawMessage
                 )
             }

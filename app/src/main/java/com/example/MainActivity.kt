@@ -98,6 +98,7 @@ fun JarvisAppRoot(
     val wakeWordState by viewModel.wakeWordState.collectAsStateWithLifecycle()
     val wakeMicRms by viewModel.wakeMicRms.collectAsStateWithLifecycle()
     val isBrainThinking by viewModel.isBrainThinking.collectAsStateWithLifecycle()
+    val isTorchOn by viewModel.isTorchOn.collectAsStateWithLifecycle()
     val currentActivityLabel by viewModel.currentActivityLabel.collectAsStateWithLifecycle()
     val lastErrorBanner by viewModel.lastErrorBanner.collectAsStateWithLifecycle()
     val lastFailedCommand by viewModel.lastFailedCommand.collectAsStateWithLifecycle()
@@ -174,6 +175,7 @@ fun JarvisAppRoot(
                     wakeWordState = wakeWordState,
                     wakeMicRms = wakeMicRms,
                     isBrainThinking = isBrainThinking,
+                    isTorchOn = isTorchOn,
                     currentActivityLabel = currentActivityLabel,
                     errorBanner = lastErrorBanner,
                     hasFailedCommandToRetry = lastFailedCommand != null,
@@ -186,6 +188,9 @@ fun JarvisAppRoot(
                     onToggleContinuousVoice = { viewModel.toggleContinuousVoiceLoopOnMainScreen() },
                     onLaunchCallingMode = { viewModel.startCallingMode() },
                     onStopInterrupt = { viewModel.stopAndInterruptAll() },
+                    onSelectMood = { viewModel.updateGirlMood(it) },
+                    onToggleTorch = { viewModel.toggleFlashlightQuick() },
+                    onOpenCreatorChannel = { viewModel.openCreatorChannel(it) },
                     onSendMessage = { viewModel.sendUserMessage(it) },
                     onClearChat = { viewModel.clearChatHistory() },
                     onRetryFailedCommand = { viewModel.retryLastFailedCommand() },
@@ -207,7 +212,7 @@ fun JarvisAppRoot(
                         singlePermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                     },
                     onStartCallingMode = { viewModel.startCallingMode() },
-                    onStopInterrupt = { viewModel.stopAndInterruptAll("Interrupted by user") },
+                    onStopInterrupt = { viewModel.stopAndInterruptAll("Ruk gayi ji… ab aap boliye") },
                     onToggleMute = { viewModel.toggleCallingMute() },
                     onEndCallingMode = { viewModel.endCallingMode() },
                     modifier = contentModifier
@@ -237,6 +242,8 @@ fun JarvisAppRoot(
                     isNotificationListenerConnected = isNotificationConnected,
                     notifications = activeNotifications,
                     multiStepProgress = multiStepProgress,
+                    isTorchOn = isTorchOn,
+                    onToggleTorch = { viewModel.toggleFlashlightQuick() },
                     onOpenAccessibilitySettings = {
                         viewModel.toolEngine.openSystemSettingsScreen("ACCESSIBILITY")
                     },
@@ -278,12 +285,19 @@ fun JarvisAppRoot(
                     onUpdateVoiceEnabled = { viewModel.updateVoiceEnabled(it) },
                     onUpdateSelectedVoice = { viewModel.updateSelectedVoice(it) },
                     onUpdateSpeakingSpeed = { viewModel.updateSpeakingSpeed(it) },
+                    onUpdateVoicePitch = { viewModel.updateVoicePitch(it) },
+                    onUpdateEmotionIntensity = { viewModel.updateEmotionIntensity(it) },
+                    onUpdateBreathingEnabled = { viewModel.updateBreathingEnabled(it) },
+                    onUpdateGigglesEnabled = { viewModel.updateGigglesEnabled(it) },
+                    onUpdateEmotionalPausesEnabled = { viewModel.updateEmotionalPausesEnabled(it) },
+                    onUpdateWhisperModeEnabled = { viewModel.updateWhisperModeEnabled(it) },
                     onUpdateBargeIn = { viewModel.updateBargeIn(it) },
                     onUpdateEchoControl = { viewModel.updateEchoControl(it) },
                     onUpdateWakeWordEnabled = { viewModel.updateWakeWordEnabled(it) },
                     onUpdateWakePhrase = { viewModel.updateWakePhrase(it) },
                     onUpdateWakeSensitivity = { viewModel.updateWakeSensitivity(it) },
                     onUpdatePersonalityMode = { viewModel.updatePersonalityMode(it) },
+                    onUpdateGirlMood = { viewModel.updateGirlMood(it) },
                     onUpdateResponseStyle = { viewModel.updateResponseStyle(it) },
                     onUpdateFormality = { viewModel.updateFormality(it) },
                     onUpdatePersonalityLevel = { viewModel.updatePersonalityLevel(it) },
@@ -292,6 +306,7 @@ fun JarvisAppRoot(
                     onClearAllMemories = { viewModel.clearAllMemories() },
                     onUpdateConfirmSensitive = { viewModel.updateConfirmSensitive(it) },
                     onUpdateScreenAutoAttach = { viewModel.updateScreenAutoAttach(it) },
+                    onOpenCreatorChannel = { viewModel.openCreatorChannel(it) },
                     onOpenAccessibilitySettings = {
                         viewModel.toolEngine.openSystemSettingsScreen("ACCESSIBILITY")
                     },

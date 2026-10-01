@@ -6,10 +6,13 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
-    <!-- Real-Time Voice & Audio Routing -->
+    <!-- Real-Time Voice, Audio Routing & Foreground Service -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Optional Communication & Automation Permissions (Requested only when needed) -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -21,6 +24,9 @@
         android:required="false" />
     <uses-feature
         android:name="android.hardware.telephony"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.flash"
         android:required="false" />
 
     <!-- Package visibility queries for Phone Automation & App Launching -->
@@ -47,6 +53,8 @@
         </intent>
         <package android:name="com.google.android.youtube" />
         <package android:name="com.whatsapp" />
+        <package android:name="org.telegram.messenger" />
+        <package android:name="com.instagram.android" />
         <package android:name="com.google.android.apps.maps" />
         <package android:name="com.android.chrome" />
         <package android:name="com.google.android.gm" />
@@ -68,6 +76,8 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
             android:exported="true"
             android:label="@string/app_name"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:theme="@style/Theme.MyApplication"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
@@ -80,7 +90,14 @@
             </intent-filter>
         </activity>
 
-        <!-- JARVIS Accessibility Service for Screen Reading & Screen Control -->
+        <!-- JARVIS Always-On Foreground Service -->
+        <service
+            android:name=".service.JarvisForegroundService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
+
+        <!-- JARVIS Accessibility Service for Screen Share Vision & Control -->
         <service
             android:name=".service.JarvisAccessibilityService"
             android:exported="true"
@@ -94,7 +111,7 @@
                 android:resource="@xml/jarvis_accessibility_service" />
         </service>
 
-        <!-- JARVIS Notification Listener Service for Reading Notifications when Permitted -->
+        <!-- JARVIS Notification Listener Service -->
         <service
             android:name=".service.JarvisNotificationService"
             android:exported="true"

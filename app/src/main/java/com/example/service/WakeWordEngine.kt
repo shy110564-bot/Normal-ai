@@ -13,6 +13,7 @@ import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import androidx.core.content.ContextCompat
+import com.example.data.preferences.GirlMood
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -22,26 +23,30 @@ data class WakeWordState(
     val isEnabled: Boolean = false,
     val isListeningForWakeWord: Boolean = false,
     val isContinuousCommandSession: Boolean = false,
+    val isChupSilentMode: Boolean = false,
     val selectedPhrase: String = "JARVIS",
-    val sensitivity: Float = 0.72f,
+    val sensitivity: Float = 0.75f,
     val lastDetectedTranscript: String = "",
-    val statusLabel: String = "Wake Word Standby (OFF)"
+    val statusLabel: String = "Ji… 'JARVIS' bolo 💕"
 )
 
 /**
- * Separate, modular Wake-Word & Continuous Speech Detection Engine.
- * Operates independently from GeminiLiveVoiceEngine so the architecture remains expandable.
+ * Separate, modular Always-On Wake-Word & Hinglish Speech Detection Engine (v5.0).
  *
  * Supports:
- * - Primary wake word: "JARVIS"
- * - Optional wake phrase: "Hey JARVIS"
- * - "JARVIS, wake up"
- * - "JARVIS, stop" / "Stop"
- * - Continuous conversation loop: WAKE -> LISTEN -> UNDERSTAND -> THINK -> SPEAK -> LISTEN AGAIN
+ * - Wake Words: "JARVIS", "Hey JARVIS", "Oye JARVIS", "Sun JARVIS", "Jarvis utho",
+ *   "Jarvis on", "Jarvis active", "Jarvis aa ja", "Jarvis suno", "Jarvis idhar aao", "Jarvis bolo"
+ * - Sleep Words: "Jarvis off", "Jarvis sleep", "Jarvis so jao", "Jarvis band"
+ * - Chup Mode: "Jarvis chup" (stops speaking immediately, but keeps listening silently!)
+ * - Special Mood Commands: "Jarvis romantic mode", "Jarvis angry mode", "Jarvis study mode",
+ *   "Jarvis fun mode", "Jarvis mom mode", "Jarvis professional mode"
  */
 class WakeWordEngine(
     private val context: Context,
     private val onWakeWordTriggered: (initialCommand: String?) -> Unit,
+    private val onSleepWordTriggered: (sleepCommand: String) -> Unit,
+    private val onChupModeTriggered: () -> Unit,
+    private val onSpecialMoodTriggered: (GirlMood) -> Unit,
     private val onContinuousCommandCaptured: (command: String) -> Unit,
     private val onStopCommandDetected: () -> Unit,
     private val onVoiceRmsChanged: (Float) -> Unit
@@ -63,7 +68,7 @@ class WakeWordEngine(
             isEnabled = enabled,
             selectedPhrase = phrase,
             sensitivity = sensitivity,
-            statusLabel = if (enabled) "Armed for '$phrase'" else "Wake Word OFF"
+            statusLabel = if (enabled) "Listening… '$phrase' bolo 💕" else "Wake Word Standby"
         )
         if (enabled && !isPausedForCallingMode) {
             startListeningLoop()
@@ -72,19 +77,16 @@ class WakeWordEngine(
         }
     }
 
-    /**
-     * Starts or stops the continuous hands-free voice loop (LISTEN -> THINK -> SPEAK -> LISTEN)
-     * directly from the main screen without requiring repeated microphone button presses.
-     */
     fun setContinuousCommandSession(active: Boolean) {
         _state.value = _state.value.copy(
             isContinuousCommandSession = active,
+            isChupSilentMode = false,
             statusLabel = if (active) {
-                "Continuous Voice Loop Active — Speak naturally"
+                "Ji… sun rahi hun, boliye 💕"
             } else if (_state.value.isEnabled) {
-                "Armed for '${_state.value.selectedPhrase}'"
+                "Listening… '${_state.value.selectedPhrase}' bolo"
             } else {
-                "Standby"
+                "Ji… boliye?"
             }
         )
         if (active && !isPausedForCallingMode) {
@@ -109,14 +111,14 @@ class WakeWordEngine(
             if (!hasMicPermission()) {
                 _state.value = _state.value.copy(
                     isListeningForWakeWord = false,
-                    statusLabel = "Mic permission needed for Wake Word"
+                    statusLabel = "Mic permission chahiye ji"
                 )
                 return@post
             }
             if (!SpeechRecognizer.isRecognitionAvailable(context)) {
                 _state.value = _state.value.copy(
                     isListeningForWakeWord = false,
-                    statusLabel = "Speech recognition service unavailable on device"
+                    statusLabel = "Speech service unavailable"
                 )
                 return@post
             }
@@ -129,7 +131,7 @@ class WakeWordEngine(
                 }
                 val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, "en-IN")
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
                 }
@@ -176,7 +178,7 @@ class WakeWordEngine(
         override fun onError(error: Int) {
             onVoiceRmsChanged(0.03f)
             if (!isPausedForCallingMode && (_state.value.isEnabled || _state.value.isContinuousCommandSession)) {
-                scheduleRestart(700L)
+                scheduleRestart(650L)
             }
         }
 
@@ -187,7 +189,7 @@ class WakeWordEngine(
                 processRecognizedSpeech(topText)
             }
             if (!isPausedForCallingMode && (_state.value.isEnabled || _state.value.isContinuousCommandSession)) {
-                scheduleRestart(350L)
+                scheduleRestart(300L)
             }
         }
 
@@ -196,9 +198,8 @@ class WakeWordEngine(
             val partial = matches.firstOrNull()?.trim().orEmpty()
             if (partial.isNotEmpty()) {
                 _state.value = _state.value.copy(lastDetectedTranscript = partial)
-                // Check for immediate "JARVIS, stop" or "Stop" interruption in partial results
                 val lower = partial.lowercase(Locale.US)
-                if (lower == "stop" || lower.contains("jarvis stop") || lower.contains("jarvis, stop")) {
+                if (lower == "stop" || lower.contains("jarvis stop") || lower.contains("jarvis chup")) {
                     onStopCommandDetected()
                 }
             }
@@ -212,40 +213,104 @@ class WakeWordEngine(
         val lower = clean.lowercase(Locale.US)
         _state.value = _state.value.copy(lastDetectedTranscript = clean)
 
-        // 1. Check for Stop command
+        // 1. Check for "Jarvis chup" (Chup mode: stop speaking, but KEEP listening!)
+        if (lower.contains("jarvis chup") || lower == "chup" || lower == "chup ho jao") {
+            _state.value = _state.value.copy(
+                isChupSilentMode = true,
+                isContinuousCommandSession = true,
+                statusLabel = "Chup hun ji… par sun rahi hun 🤫"
+            )
+            onChupModeTriggered()
+            return
+        }
+
+        // 2. Check for Sleep Words ("Jarvis off", "Jarvis sleep", "Jarvis so jao", "Jarvis band")
+        if (lower.contains("jarvis off") ||
+            lower.contains("jarvis sleep") ||
+            lower.contains("jarvis so jao") ||
+            lower.contains("jarvis band")
+        ) {
+            _state.value = _state.value.copy(
+                isContinuousCommandSession = false,
+                isChupSilentMode = false,
+                statusLabel = "Theek hai ji… so jaati hun 💤"
+            )
+            onSleepWordTriggered(clean)
+            return
+        }
+
+        // 3. Check for Stop command
         if (lower == "stop" || lower == "jarvis stop" || lower == "jarvis, stop" || lower.endsWith("jarvis stop")) {
             _state.value = _state.value.copy(
                 isContinuousCommandSession = false,
-                statusLabel = "Stopped by voice command"
+                statusLabel = "Ruk gayi ji"
             )
             onStopCommandDetected()
             return
         }
 
-        // 2. Check for Wake Word ("JARVIS", "Hey JARVIS", "JARVIS wake up", or phonetic close matches based on sensitivity)
+        // 4. Check for Special Voice Mode commands
+        when {
+            lower.contains("romantic mode") -> {
+                onSpecialMoodTriggered(GirlMood.ROMANTIC)
+                return
+            }
+            lower.contains("angry mode") || lower.contains("nakhre mode") -> {
+                onSpecialMoodTriggered(GirlMood.ANGRY)
+                return
+            }
+            lower.contains("study mode") -> {
+                onSpecialMoodTriggered(GirlMood.STUDY)
+                return
+            }
+            lower.contains("fun mode") || lower.contains("playful mode") -> {
+                onSpecialMoodTriggered(GirlMood.PLAYFUL)
+                return
+            }
+            lower.contains("mom mode") || lower.contains("caring mode") -> {
+                onSpecialMoodTriggered(GirlMood.CARING_MOM)
+                return
+            }
+            lower.contains("professional mode") -> {
+                onSpecialMoodTriggered(GirlMood.PROFESSIONAL)
+                return
+            }
+        }
+
+        // 5. Check for Wake Words ("JARVIS", "Hey JARVIS", "Oye JARVIS", "Sun JARVIS",
+        // "Jarvis utho", "Jarvis on", "Jarvis active", "Jarvis aa ja", "Jarvis suno", "Jarvis idhar aao", "Jarvis bolo")
         val hasWakeWord = matchesWakeWord(lower, _state.value.sensitivity)
         if (hasWakeWord) {
             playActivationTone()
             _state.value = _state.value.copy(
                 isContinuousCommandSession = true,
-                statusLabel = "Wake Word Detected — Listening continuously"
+                isChupSilentMode = false,
+                statusLabel = "Ji… boliye, sun rahi hun 💕"
             )
             val strippedCommand = extractCommandAfterWakeWord(clean)
             onWakeWordTriggered(strippedCommand.takeIf { it.isNotBlank() })
             return
         }
 
-        // 3. If already in an active continuous command session, forward the spoken command directly!
+        // 6. If already in an active continuous command session, forward the spoken command directly!
         if (_state.value.isContinuousCommandSession) {
+            _state.value = _state.value.copy(isChupSilentMode = false)
             onContinuousCommandCaptured(clean)
         }
     }
 
     private fun matchesWakeWord(lowerText: String, sensitivity: Float): Boolean {
-        if (lowerText.contains("jarvis") || lowerText.contains("hey jarvis")) return true
-        if (sensitivity >= 0.65f) {
-            // Handle common speech-to-text phonetic variations of "Jarvis"
-            if (lowerText.startsWith("jervis") || lowerText.startsWith("javis") || lowerText.startsWith("harvest")) {
+        if (lowerText.contains("jarvis") ||
+            lowerText.contains("hey jarvis") ||
+            lowerText.contains("oye jarvis") ||
+            lowerText.contains("sun jarvis")
+        ) return true
+
+        if (sensitivity >= 0.60f) {
+            if (lowerText.startsWith("jervis") ||
+                lowerText.startsWith("javis") ||
+                lowerText.startsWith("jarv")
+            ) {
                 return true
             }
         }
@@ -253,7 +318,9 @@ class WakeWordEngine(
     }
 
     private fun extractCommandAfterWakeWord(raw: String): String {
-        val regex = Regex("(?i)^(hey\\s+)?(jarvis|jervis|javis)[,!.]?(\\s+wake\\s+up[,!.]?)?\\s*")
+        val regex = Regex(
+            "(?i)^(hey\\s+|oye\\s+|sun\\s+|suno\\s+)?(jarvis|jervis|javis)[,!.]?(\\s+(utho|wake\\s+up|on|active|aa\\s+ja|suno|idhar\\s+aao|bolo)[,!.]?)?\\s*"
+        )
         return raw.replaceFirst(regex, "").trim()
     }
 
@@ -277,8 +344,8 @@ class WakeWordEngine(
 
     private fun playActivationTone() {
         runCatching {
-            val tg = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 65)
-            tg.startTone(ToneGenerator.TONE_PROP_ACK, 160)
+            val tg = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 60)
+            tg.startTone(ToneGenerator.TONE_PROP_ACK, 150)
         }
     }
 }

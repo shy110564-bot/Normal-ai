@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.SettingsApplications
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -60,6 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.R
+import com.example.data.preferences.GirlMood
 import com.example.data.preferences.JarvisSettings
 import com.example.data.preferences.PersonalityMode
 import com.example.data.remote.ApiKeyTestResult
@@ -101,12 +103,19 @@ fun SettingsScreen(
     onUpdateVoiceEnabled: (Boolean) -> Unit,
     onUpdateSelectedVoice: (String) -> Unit,
     onUpdateSpeakingSpeed: (Float) -> Unit,
+    onUpdateVoicePitch: (Float) -> Unit,
+    onUpdateEmotionIntensity: (Float) -> Unit,
+    onUpdateBreathingEnabled: (Boolean) -> Unit,
+    onUpdateGigglesEnabled: (Boolean) -> Unit,
+    onUpdateEmotionalPausesEnabled: (Boolean) -> Unit,
+    onUpdateWhisperModeEnabled: (Boolean) -> Unit,
     onUpdateBargeIn: (Boolean) -> Unit,
     onUpdateEchoControl: (Boolean) -> Unit,
     onUpdateWakeWordEnabled: (Boolean) -> Unit,
     onUpdateWakePhrase: (String) -> Unit,
     onUpdateWakeSensitivity: (Float) -> Unit,
     onUpdatePersonalityMode: (PersonalityMode) -> Unit,
+    onUpdateGirlMood: (GirlMood) -> Unit,
     onUpdateResponseStyle: (String) -> Unit,
     onUpdateFormality: (Float) -> Unit,
     onUpdatePersonalityLevel: (Float) -> Unit,
@@ -115,6 +124,7 @@ fun SettingsScreen(
     onClearAllMemories: () -> Unit,
     onUpdateConfirmSensitive: (Boolean) -> Unit,
     onUpdateScreenAutoAttach: (Boolean) -> Unit,
+    onOpenCreatorChannel: (String) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onOpenNotificationSettings: () -> Unit,
     onOpenAppSystemSettings: () -> Unit,
@@ -136,9 +146,59 @@ fun SettingsScreen(
     ) {
         item {
             HudSectionHeader(
-                title = "JARVIS CORE CONFIGURATION",
-                subtitle = "AI Brain, Gemini Live Voice, Wake Word, Personality, Memory, Automation & Security"
+                title = "JARVIS v5.0 FINAL ULTIMATE",
+                subtitle = "Developer: AK EXPLOITS • AI Brain, Real Girl Voice, 12 Moods, Memory & Phone Control"
             )
+        }
+
+        // 0. CREATOR RECOGNITION CARD (AK EXPLOITS — SECTION 1 & 2)
+        item {
+            SettingsCard(
+                title = "CREATOR & DEVELOPER IDENTITY",
+                icon = Icons.Default.Verified,
+                badgeLabel = JarvisSettings.CREATOR_NAME,
+                badgeColor = JarvisEmerald
+            ) {
+                Text(
+                    text = "Ji… mujhe banaya hai AK EXPLOITS ne 💕 Woh mere creator hain!",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = JarvisTextPrimary,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Version: ${JarvisSettings.APP_VERSION} • Telegram: ${JarvisSettings.CREATOR_TELEGRAM_URL}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = JarvisTextSecondary
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = { onOpenCreatorChannel("TELEGRAM") },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = JarvisCyan,
+                            contentColor = JarvisObsidian
+                        ),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("creator_telegram_btn")
+                    ) {
+                        Text("Telegram Channel", fontWeight = FontWeight.Bold)
+                    }
+                    OutlinedButton(
+                        onClick = { onOpenCreatorChannel("YOUTUBE") },
+                        border = BorderStroke(1.dp, JarvisCyan),
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("creator_youtube_btn")
+                    ) {
+                        Text("YouTube: AK EXPLOITS", color = JarvisCyan, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
         }
 
         // 1. AI BRAIN & GEMINI API KEY CONFIGURATION
@@ -336,24 +396,24 @@ fun SettingsScreen(
             }
         }
 
-        // 2. VOICE & GEMINI LIVE SETTINGS
+        // 2. VOICE & GIRL REALISM SETTINGS (SECTION 11 & 15)
         item {
             SettingsCard(
-                title = "2. GEMINI LIVE VOICE SETTINGS",
+                title = "2. REAL GIRL VOICE & GEMINI LIVE",
                 icon = Icons.Default.RecordVoiceOver,
                 badgeLabel = settings.selectedVoiceName.uppercase(),
                 badgeColor = JarvisCyan
             ) {
                 SettingsToggleRow(
                     title = "Voice Output Enabled",
-                    subtitle = "Use Gemini Live native audio & spoken responses",
+                    subtitle = "Use Gemini Live native audio & sweet Indian Hinglish TTS",
                     checked = settings.voiceOutputEnabled,
                     onCheckedChange = onUpdateVoiceEnabled
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Select Gemini Live Prebuilt Voice:",
+                    text = "Select Voice Persona (Aoede / Priya Hinglish / Kore / Shimmer):",
                     style = MaterialTheme.typography.labelLarge,
                     color = JarvisCyan
                 )
@@ -376,7 +436,7 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Speaking Speed: ${String.format(Locale.US, "%.2fx", settings.speakingSpeed)}",
+                    text = "Speaking Speed: ${String.format(Locale.US, "%.2fx", settings.speakingSpeed)} (Sweet default: 0.88x)",
                     style = MaterialTheme.typography.labelLarge,
                     color = JarvisTextPrimary
                 )
@@ -387,16 +447,68 @@ fun SettingsScreen(
                     colors = SliderDefaults.colors(thumbColor = JarvisCyan, activeTrackColor = JarvisCyan)
                 )
 
+                Text(
+                    text = "Girl Voice Pitch: ${String.format(Locale.US, "%.2fx", settings.voicePitch)} (Sweet default: 1.15x)",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = JarvisTextPrimary
+                )
+                Slider(
+                    value = settings.voicePitch,
+                    onValueChange = onUpdateVoicePitch,
+                    valueRange = 0.6f..1.8f,
+                    colors = SliderDefaults.colors(thumbColor = JarvisCyan, activeTrackColor = JarvisCyan)
+                )
+
+                Text(
+                    text = "Emotion Intensity: ${(settings.emotionIntensity * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = JarvisTextPrimary
+                )
+                Slider(
+                    value = settings.emotionIntensity,
+                    onValueChange = onUpdateEmotionIntensity,
+                    valueRange = 0f..1f,
+                    colors = SliderDefaults.colors(thumbColor = JarvisCyan, activeTrackColor = JarvisCyan)
+                )
+
+                SettingsToggleRow(
+                    title = "Natural Breathing & Pauses ('Ji…')",
+                    subtitle = "Include gentle breathing pauses in Hinglish speech",
+                    checked = settings.breathingEnabled,
+                    onCheckedChange = onUpdateBreathingEnabled
+                )
+
+                SettingsToggleRow(
+                    title = "Natural Giggles & Reactions",
+                    subtitle = "Express playful giggles ('hehe', 'Arre!') only when genuinely happy or shy",
+                    checked = settings.gigglesEnabled,
+                    onCheckedChange = onUpdateGigglesEnabled
+                )
+
+                SettingsToggleRow(
+                    title = "Emotional Pauses",
+                    subtitle = "Insert soft pauses before affectionate or thoughtful replies",
+                    checked = settings.emotionalPausesEnabled,
+                    onCheckedChange = onUpdateEmotionalPausesEnabled
+                )
+
+                SettingsToggleRow(
+                    title = "Late-Night Whisper Mode",
+                    subtitle = "Speak in an extra soft, soothing whisper tone",
+                    checked = settings.whisperModeEnabled,
+                    onCheckedChange = onUpdateWhisperModeEnabled
+                )
+
                 SettingsToggleRow(
                     title = "Natural Interruption (Barge-In)",
-                    subtitle = "Immediately stop JARVIS speaking when you start talking or say 'JARVIS, stop'",
+                    subtitle = "Immediately stop speaking when you talk or say 'JARVIS chup' / 'Ruko'",
                     checked = settings.bargeInEnabled,
                     onCheckedChange = onUpdateBargeIn
                 )
 
                 SettingsToggleRow(
                     title = "Hardware Acoustic Echo Cancellation",
-                    subtitle = "Prevent JARVIS from hearing its own speaker output while speaking",
+                    subtitle = "Prevent JARVIS from hearing her own speaker output while speaking",
                     checked = settings.echoControlEnabled,
                     onCheckedChange = onUpdateEchoControl
                 )
@@ -407,7 +519,7 @@ fun SettingsScreen(
                     border = BorderStroke(1.dp, JarvisCyan),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Open Dedicated Calling Mode", color = JarvisCyan, fontWeight = FontWeight.Bold)
+                    Text("Open Dedicated Calling Mode 📞", color = JarvisCyan, fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -415,14 +527,14 @@ fun SettingsScreen(
         // 3. WAKE WORD ENGINE SETTINGS
         item {
             SettingsCard(
-                title = "3. WAKE WORD ENGINE",
+                title = "3. WAKE WORD & SLEEP ENGINE",
                 icon = Icons.Default.Mic,
                 badgeLabel = if (settings.wakeWordEnabled) "ARMED: ${settings.selectedWakePhrase}" else "STANDBY",
                 badgeColor = if (settings.wakeWordEnabled) JarvisEmerald else JarvisTextMuted
             ) {
                 SettingsToggleRow(
-                    title = "Wake Word Detection ON/OFF",
-                    subtitle = "Hands-free activation via separate Wake Word Engine",
+                    title = "Always-On Wake Word Detection",
+                    subtitle = "Hands-free activation ('JARVIS', 'Hey JARVIS', 'Oye JARVIS', 'Sun JARVIS', 'Jarvis utho')",
                     checked = settings.wakeWordEnabled,
                     onCheckedChange = { enabled ->
                         if (enabled && !hasMicPermission) {
@@ -434,11 +546,14 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Selected Wake Phrase:",
+                    text = "Primary Wake Phrase:",
                     style = MaterialTheme.typography.labelLarge,
                     color = JarvisCyan
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     JarvisSettings.WAKE_PHRASES.forEach { phrase ->
                         FilterChip(
                             selected = settings.selectedWakePhrase == phrase,
@@ -463,20 +578,44 @@ fun SettingsScreen(
             }
         }
 
-        // 4. PERSONALITY CONFIGURATION (MANUAL SELECTION ONLY)
+        // 4. PERSONALITY & 12 EMOTIONAL MOODS (SECTION 8, 9, 13, 14)
         item {
             SettingsCard(
-                title = "4. PERSONALITY MATRIX",
+                title = "4. PERSONALITY & 12 GIRL MOODS",
                 icon = Icons.Default.Psychology,
-                badgeLabel = settings.personalityMode.displayName.uppercase(),
+                badgeLabel = "${settings.currentMood.emoji} ${settings.currentMood.title.uppercase()}",
                 badgeColor = JarvisArcBlue
             ) {
                 Text(
-                    text = "Manual Mode Selection (JARVIS never switches personality without your permission):",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = JarvisTextSecondary
+                    text = "Active Emotional Mood (12 Real Girl Moods):",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = JarvisCyan
                 )
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    GirlMood.entries.forEach { mood ->
+                        FilterChip(
+                            selected = settings.currentMood == mood,
+                            onClick = { onUpdateGirlMood(mood) },
+                            label = { Text("${mood.emoji} ${mood.title}") },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = JarvisCyan.copy(alpha = 0.22f),
+                                selectedLabelColor = JarvisCyan
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "Core Personality Mode:",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = JarvisCyan
+                )
+                Spacer(modifier = Modifier.height(6.dp))
 
                 PersonalityMode.entries.forEach { mode ->
                     val isSelected = settings.personalityMode == mode
@@ -533,7 +672,7 @@ fun SettingsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Formality Level: ${(settings.formalityLevel * 100).toInt()}%",
+                    text = "Respectfulness ('Ji' Level): ${(settings.formalityLevel * 100).toInt()}%",
                     style = MaterialTheme.typography.labelLarge,
                     color = JarvisTextPrimary
                 )
@@ -561,14 +700,14 @@ fun SettingsScreen(
         // 5. MEMORY SYSTEM CONTROLS
         item {
             SettingsCard(
-                title = "5. LONG-TERM MEMORY",
+                title = "5. LONG-TERM & 50-TURN MEMORY",
                 icon = Icons.Default.Memory,
                 badgeLabel = if (settings.memoryEnabled) "ENABLED" else "OFF",
                 badgeColor = if (settings.memoryEnabled) JarvisEmerald else JarvisTextMuted
             ) {
                 SettingsToggleRow(
                     title = "Long-Term Memory System",
-                    subtitle = "Remember user preferences, facts, custom commands & conversation summaries",
+                    subtitle = "Remember user name, favourite songs, contacts, habits & last 50 conversation turns",
                     checked = settings.memoryEnabled,
                     onCheckedChange = onUpdateMemoryEnabled
                 )
@@ -598,14 +737,14 @@ fun SettingsScreen(
         // 6. AUTOMATION & ACCESSIBILITY SETTINGS
         item {
             SettingsCard(
-                title = "6. AUTOMATION & SCREEN INTELLIGENCE",
+                title = "6. FULL PHONE & SCREEN CONTROL",
                 icon = Icons.Default.SettingsApplications,
                 badgeLabel = if (isAccessibilityConnected) "ACCESSIBILITY ON" else "SETUP AVAILABLE",
                 badgeColor = if (isAccessibilityConnected) JarvisEmerald else JarvisAmber
             ) {
                 SettingsToggleRow(
-                    title = "Auto-Attach Screen Context",
-                    subtitle = "Automatically include visible screen elements when Accessibility Service is active",
+                    title = "Live Screen Vision Auto-Attach",
+                    subtitle = "Automatically read & include visible screen text when Accessibility Service is active",
                     checked = settings.screenContextAutoAttach,
                     onCheckedChange = onUpdateScreenAutoAttach
                 )
@@ -669,7 +808,7 @@ fun SettingsScreen(
                 )
                 PermissionExplainRow(
                     name = "Contacts (READ_CONTACTS)",
-                    explanation = "Used only when you ask JARVIS to call or message a contact by name (e.g., 'Send Rahul a message').",
+                    explanation = "Used only when you ask JARVIS to call or message a contact by name (e.g., 'Rahul ko call lagao').",
                     granted = hasContactsPermission,
                     onRequest = { onRequestPermission(android.Manifest.permission.READ_CONTACTS) }
                 )

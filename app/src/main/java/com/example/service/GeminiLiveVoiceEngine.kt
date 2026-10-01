@@ -47,16 +47,16 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 enum class JarvisOperationalState(val badgeText: String, val subtitle: String) {
-    STANDBY("STANDBY", "Systems online — Ready for voice or command"),
-    CONNECTING("CONNECTING", "Establishing real-time Gemini Live WebSocket..."),
-    CONNECTED("CONNECTED", "Gemini Live neural link established"),
-    LISTENING("LISTENING", "Microphone active — Listening continuously"),
-    THINKING("THINKING", "Processing intent & reasoning with Gemini..."),
-    SPEAKING("SPEAKING", "JARVIS speaking — Say 'JARVIS, stop' to interrupt"),
-    INTERRUPTED("INTERRUPTED", "Speech interrupted — Listening to your new command"),
-    RECONNECTING("RECONNECTING", "Restoring Gemini Live WebSocket session..."),
-    OFFLINE("OFFLINE", "Network unavailable — Local tools active"),
-    ERROR("ERROR", "System alert — Check connection or API key")
+    STANDBY("STANDBY", "Ji… boliye? Main sun rahi hun 💕"),
+    CONNECTING("CONNECTING", "Ji… Gemini Live se connect ho rahi hun…"),
+    CONNECTED("CONNECTED", "Ji… boliye, sun rahi hun 💕"),
+    LISTENING("LISTENING", "Haan ji… boliye, sun rahi hun 💕"),
+    THINKING("THINKING", "Hmm… soch rahi hun ji…"),
+    SPEAKING("SPEAKING", "JARVIS bol rahi hai… ('JARVIS chup' to pause)"),
+    INTERRUPTED("INTERRUPTED", "Ruk gayi ji… ab aap boliye"),
+    RECONNECTING("RECONNECTING", "Ek second ji… reconnect kar rahi hun…"),
+    OFFLINE("OFFLINE", "Internet off hai ji — Local controls on hain"),
+    ERROR("ERROR", "Ji, connection ya API key check kar lijiye")
 }
 
 enum class GeminiLiveConnectionState(val label: String) {
@@ -79,7 +79,7 @@ data class CallingSessionTelemetry(
     val spectrumBands: List<Float> = List(16) { 0.08f },
     val liveTranscript: String = "",
     val jarvisLiveResponse: String = "",
-    val statusDetail: String = "Tap Calling Mode or Mic to begin continuous conversation",
+    val statusDetail: String = "Ji… Live Call shuru karne ke liye tap karein 💕",
     val errorMessage: String? = null
 )
 
@@ -117,7 +117,7 @@ class GeminiLiveVoiceEngine(
     private var currentSettings: JarvisSettings = JarvisSettings()
     private var reconnectAttempts = 0
 
-    // Native Android TTS as expandable secondary/fallback voice output
+    // Native Android TTS with Indian Hinglish female pitch & speed tuning
     private var tts: TextToSpeech? = null
     @Volatile
     private var isTtsReady = false
@@ -129,7 +129,15 @@ class GeminiLiveVoiceEngine(
     private fun initTextToSpeech() {
         tts = TextToSpeech(context.applicationContext) { status ->
             if (status == TextToSpeech.SUCCESS) {
-                tts?.language = Locale.US
+                val indianLocale = Locale.forLanguageTag("en-IN")
+                val hiLocale = Locale.forLanguageTag("hi-IN")
+                val res = tts?.setLanguage(indianLocale)
+                if (res == TextToSpeech.LANG_MISSING_DATA || res == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    val hiRes = tts?.setLanguage(hiLocale)
+                    if (hiRes == TextToSpeech.LANG_MISSING_DATA || hiRes == TextToSpeech.LANG_NOT_SUPPORTED) {
+                        tts?.language = Locale.US
+                    }
+                }
                 isTtsReady = true
                 tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                     override fun onStart(utteranceId: String?) {
@@ -137,7 +145,7 @@ class GeminiLiveVoiceEngine(
                             it.copy(
                                 operationalState = JarvisOperationalState.SPEAKING,
                                 isSpeakerActive = true,
-                                statusDetail = "JARVIS speaking response..."
+                                statusDetail = "JARVIS bol rahi hai 💕"
                             )
                         }
                     }
@@ -154,9 +162,9 @@ class GeminiLiveVoiceEngine(
                                 isSpeakerActive = false,
                                 audioAmplitude = 0.05f,
                                 statusDetail = if (nextState == JarvisOperationalState.LISTENING) {
-                                    "Listening continuously — Speak naturally"
+                                    "Ji… boliye, sun rahi hun 💕"
                                 } else {
-                                    "Ready"
+                                    "Ji… boliye?"
                                 }
                             )
                         }
@@ -178,16 +186,13 @@ class GeminiLiveVoiceEngine(
         ) == PackageManager.PERMISSION_GRANTED
     }
 
-    /**
-     * Starts real-time Gemini Live Calling Mode (continuous LISTEN -> THINK -> SPEAK -> LISTEN).
-     */
     fun startCallingMode(apiKey: String, settings: JarvisSettings) {
         if (!hasRecordAudioPermission()) {
             updateTelemetry {
                 it.copy(
                     operationalState = JarvisOperationalState.ERROR,
-                    errorMessage = "Microphone permission (RECORD_AUDIO) is required for Gemini Live voice conversation.",
-                    statusDetail = "Grant Microphone permission to begin"
+                    errorMessage = "Ji, baat karne ke liye Microphone permission allow kar dijiye 💕",
+                    statusDetail = "Microphone permission required"
                 )
             }
             return
@@ -197,7 +202,7 @@ class GeminiLiveVoiceEngine(
                 it.copy(
                     operationalState = JarvisOperationalState.OFFLINE,
                     liveConnectionState = GeminiLiveConnectionState.ERROR,
-                    errorMessage = "Network unavailable. Connect to the internet to start Gemini Live Calling Mode.",
+                    errorMessage = "Ji, internet band hai. Wi-Fi ya data on karke Calling Mode start karein.",
                     statusDetail = "Offline — Gemini Live unavailable"
                 )
             }
@@ -208,7 +213,7 @@ class GeminiLiveVoiceEngine(
                 it.copy(
                     operationalState = JarvisOperationalState.ERROR,
                     liveConnectionState = GeminiLiveConnectionState.ERROR,
-                    errorMessage = "Gemini API Key not configured. Open Settings > AI Brain to save your API Key.",
+                    errorMessage = "Ji, pehle Settings > AI Brain mein apni Gemini API Key save kar dijiye 💕",
                     statusDetail = "API Key required"
                 )
             }
@@ -232,31 +237,24 @@ class GeminiLiveVoiceEngine(
                 isMicMuted = false,
                 activeLiveModel = settings.liveVoiceModel,
                 errorMessage = null,
-                statusDetail = "Connecting to Gemini Live (${settings.liveVoiceModel})..."
+                statusDetail = "Ji… Gemini Live (${settings.liveVoiceModel}) se connect ho rahi hun…"
             )
         }
 
         connectWebSocket(modelToUse = settings.liveVoiceModel)
     }
 
-    /**
-     * Toggles mute/unmute during an active Calling Mode session.
-     */
     fun toggleMute() {
         val muted = !_telemetry.value.isMicMuted
         updateTelemetry {
             it.copy(
                 isMicMuted = muted,
-                statusDetail = if (muted) "MIC MUTED — Tap Unmute to resume speaking" else "MIC ACTIVE — Listening continuously"
+                statusDetail = if (muted) "Mic Muted — Unmute dabayein" else "Ji… boliye, sun rahi hun 💕"
             )
         }
     }
 
-    /**
-     * Interrupts JARVIS immediately ("JARVIS, stop" / Barge-in / Stop button)
-     * and returns to listening if in Calling Mode or Standby otherwise.
-     */
-    fun interruptSpeech(returnToListening: Boolean = true, reason: String = "Interrupted by user") {
+    fun interruptSpeech(returnToListening: Boolean = true, reason: String = "Theek hai ji, ruk gayi") {
         pcmPlaybackQueue.clear()
         runCatching {
             audioTrack?.pause()
@@ -292,9 +290,9 @@ class GeminiLiveVoiceEngine(
                     it.copy(
                         operationalState = targetState,
                         statusDetail = if (targetState == JarvisOperationalState.LISTENING) {
-                            "Listening for your next command..."
+                            "Ji… boliye, sun rahi hun 💕"
                         } else {
-                            "Standby"
+                            "Ji… boliye?"
                         }
                     )
                 } else {
@@ -304,10 +302,7 @@ class GeminiLiveVoiceEngine(
         }
     }
 
-    /**
-     * Ends Calling Mode and cleanly releases WebSocket, AudioRecord, and AudioTrack resources.
-     */
-    fun stopCallingMode(reason: String = "Calling Mode ended") {
+    fun stopCallingMode(reason: String = "Call khatam ho gayi ji 💕") {
         reconnectJob?.cancel()
         audioCaptureJob?.cancel()
         audioPlaybackJob?.cancel()
@@ -338,25 +333,34 @@ class GeminiLiveVoiceEngine(
     }
 
     /**
-     * Speaks a text response using Android TTS when not in native WebSocket PCM stream
-     * (or when voice output is enabled for wake-word / text-assisted responses).
+     * Speaks a response with 21-year-old Indian girl voice pitch, speed, and mood tuning.
+     * Strips markdown and emoji characters so TTS never reads emoji names robotically.
      */
     fun speakTextResponse(text: String, settings: JarvisSettings) {
         if (!settings.voiceOutputEnabled || text.isBlank()) return
         if (!isTtsReady) return
-        val cleanText = text.replace(Regex("[*#`_~]"), "").trim()
-        tts?.setSpeechRate(settings.speakingSpeed.coerceIn(0.5f, 2.0f))
+
+        // Remove markdown symbols and emoji characters so speech is 100% natural
+        val cleanText = text
+            .replace(Regex("[*#`_~✅📦🔴🎤📱🖥️❤️😤😊🤱📚💼😴🤩💕🥰😘😳😢😏🤔🥺💤🤗]"), "")
+            .replace("…", ", ")
+            .trim()
+        if (cleanText.isEmpty()) return
+
+        val effectivePitch = (settings.voicePitch * settings.currentMood.pitchMultiplier).coerceIn(0.7f, 1.8f)
+        val effectiveRate = (settings.speakingSpeed * settings.currentMood.rateMultiplier *
+            if (settings.whisperModeEnabled) 0.88f else 1.0f).coerceIn(0.5f, 1.8f)
+
+        tts?.setPitch(effectivePitch)
+        tts?.setSpeechRate(effectiveRate)
         tts?.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, UUID.randomUUID().toString())
     }
 
-    /**
-     * Sends a text/voice command directly over the active Gemini Live WebSocket if connected.
-     */
     fun sendTextTurnOverLiveSession(text: String) {
         val ws = webSocket ?: return
         if (!isSetupComplete) return
         if (isStopCommand(text)) {
-            interruptSpeech(returnToListening = true, reason = "Voice command: Stop")
+            interruptSpeech(returnToListening = true, reason = "Ruk gayi ji")
             return
         }
 
@@ -378,7 +382,7 @@ class GeminiLiveVoiceEngine(
             it.copy(
                 operationalState = JarvisOperationalState.THINKING,
                 liveTranscript = text,
-                statusDetail = "Sent to Gemini Live — Thinking..."
+                statusDetail = "Hmm… soch rahi hun ji…"
             )
         }
     }
@@ -442,7 +446,7 @@ class GeminiLiveVoiceEngine(
                             "voiceConfig",
                             JSONObject().put(
                                 "prebuiltVoiceConfig",
-                                JSONObject().put("voiceName", currentSettings.selectedVoiceName)
+                                JSONObject().put("voiceName", currentSettings.resolvedGeminiLiveVoice())
                             )
                         )
                     )
@@ -466,7 +470,6 @@ class GeminiLiveVoiceEngine(
         try {
             val json = JSONObject(rawJson)
 
-            // 1. Setup Complete
             if (json.has("setupComplete")) {
                 isSetupComplete = true
                 reconnectAttempts = 0
@@ -475,14 +478,13 @@ class GeminiLiveVoiceEngine(
                         operationalState = JarvisOperationalState.LISTENING,
                         liveConnectionState = GeminiLiveConnectionState.GEMINI_CONNECTED,
                         errorMessage = null,
-                        statusDetail = "Gemini Live Connected — Speak naturally (Continuous Listening)"
+                        statusDetail = "Ji… boliye, main sun rahi hun 💕"
                     )
                 }
                 startContinuousAudioLoops()
                 return
             }
 
-            // 2. Tool Call from Gemini Live
             if (json.has("toolCall")) {
                 val toolCallObj = json.optJSONObject("toolCall")
                 val fnCalls = toolCallObj?.optJSONArray("functionCalls") ?: JSONArray()
@@ -490,7 +492,7 @@ class GeminiLiveVoiceEngine(
                     updateTelemetry {
                         it.copy(
                             operationalState = JarvisOperationalState.THINKING,
-                            statusDetail = "Executing requested tool action..."
+                            statusDetail = "Abhi karti hun ji…"
                         )
                     }
                     val functionResponses = JSONArray()
@@ -525,12 +527,11 @@ class GeminiLiveVoiceEngine(
                 return
             }
 
-            // 3. Server Content (Audio chunks, Text transcript, Interruption, Turn Complete)
             if (json.has("serverContent")) {
                 val serverContent = json.optJSONObject("serverContent") ?: return
 
                 if (serverContent.optBoolean("interrupted", false)) {
-                    interruptSpeech(returnToListening = true, reason = "Barge-in detected — Listening")
+                    interruptSpeech(returnToListening = true, reason = "Ji… boliye, sun rahi hun")
                     return
                 }
 
@@ -541,7 +542,6 @@ class GeminiLiveVoiceEngine(
                     for (i in 0 until parts.length()) {
                         val part = parts.optJSONObject(i) ?: continue
 
-                        // Extract text if present
                         val textPart = part.optString("text", "")
                         if (textPart.isNotBlank()) {
                             updateTelemetry {
@@ -550,7 +550,6 @@ class GeminiLiveVoiceEngine(
                             }
                         }
 
-                        // Extract native PCM audio chunk
                         val inlineData = part.optJSONObject("inlineData")
                         if (inlineData != null) {
                             val mimeType = inlineData.optString("mimeType", "")
@@ -563,7 +562,7 @@ class GeminiLiveVoiceEngine(
                                         it.copy(
                                             operationalState = JarvisOperationalState.SPEAKING,
                                             isSpeakerActive = true,
-                                            statusDetail = "JARVIS speaking (Gemini Live native voice)"
+                                            statusDetail = "JARVIS bol rahi hai 💕"
                                         )
                                     }
                                 }
@@ -594,8 +593,6 @@ class GeminiLiveVoiceEngine(
     private fun handleSocketDisconnectOrModelFallback(code: Int, reason: String) {
         if (!_telemetry.value.isCallingModeActive) return
 
-        // If user-configured model (e.g. "gemini-3.8-live") is not yet active on the endpoint,
-        // automatically fall back to "gemini-2.5-flash-native-audio-preview-12-2025" so Live Voice works seamlessly
         if (!isSetupComplete && !triedFallbackLiveModel &&
             _telemetry.value.activeLiveModel != JarvisSettings.FALLBACK_LIVE_MODEL
         ) {
@@ -605,7 +602,7 @@ class GeminiLiveVoiceEngine(
                     operationalState = JarvisOperationalState.CONNECTING,
                     liveConnectionState = GeminiLiveConnectionState.RECONNECTING,
                     activeLiveModel = JarvisSettings.FALLBACK_LIVE_MODEL,
-                    statusDetail = "Switching to live native audio model (${JarvisSettings.FALLBACK_LIVE_MODEL})..."
+                    statusDetail = "Connecting to live voice model (${JarvisSettings.FALLBACK_LIVE_MODEL})..."
                 )
             }
             connectWebSocket(modelToUse = JarvisSettings.FALLBACK_LIVE_MODEL)
@@ -620,7 +617,7 @@ class GeminiLiveVoiceEngine(
                     it.copy(
                         operationalState = JarvisOperationalState.RECONNECTING,
                         liveConnectionState = GeminiLiveConnectionState.RECONNECTING,
-                        statusDetail = "Reconnecting Gemini Live session (attempt $reconnectAttempts/3)..."
+                        statusDetail = "Ek second ji… reconnecting ($reconnectAttempts/3)..."
                     )
                 }
                 delay(1500L * reconnectAttempts)
@@ -635,9 +632,9 @@ class GeminiLiveVoiceEngine(
                     operationalState = JarvisOperationalState.ERROR,
                     liveConnectionState = GeminiLiveConnectionState.ERROR,
                     errorMessage = if (isKeyErr) {
-                        "Gemini Live authentication failed ($reason). Verify your Gemini API Key in Settings."
+                        "Ji, Gemini Live key verify nahi hui ($reason). Settings > AI Brain check karein."
                     } else {
-                        "Gemini Live connection closed ($code: $reason). Tap Reconnect to resume."
+                        "Connection closed ($code: $reason). Reconnect dabayein ji."
                     },
                     statusDetail = "Connection interrupted"
                 )
@@ -692,14 +689,13 @@ class GeminiLiveVoiceEngine(
                     }
                 } else {
                     if (_telemetry.value.operationalState == JarvisOperationalState.SPEAKING && isModelTurnFinished) {
-                        // Response playback finished -> automatically return to LISTENING
                         updateTelemetry {
                             it.copy(
                                 operationalState = JarvisOperationalState.LISTENING,
                                 isSpeakerActive = false,
                                 audioAmplitude = 0.04f,
                                 jarvisLiveResponse = "",
-                                statusDetail = "Listening continuously — Speak your next command"
+                                statusDetail = "Ji… boliye, sun rahi hun 💕"
                             )
                         }
                     }
@@ -739,9 +735,8 @@ class GeminiLiveVoiceEngine(
                 return@launch
             }
 
-            // Attach hardware AcousticEchoCanceler, NoiseSuppressor, and AutomaticGainControl
             val sessionId = record.audioSessionId
-            if ( currentSettings.echoControlEnabled && AcousticEchoCanceler.isAvailable()) {
+            if (currentSettings.echoControlEnabled && AcousticEchoCanceler.isAvailable()) {
                 echoCanceler = runCatching {
                     AcousticEchoCanceler.create(sessionId)?.apply { enabled = true }
                 }.getOrNull()
@@ -760,7 +755,7 @@ class GeminiLiveVoiceEngine(
             record.startRecording()
             audioRecord = record
 
-            val buffer = ByteArray(3200) // 100ms chunks at 16kHz 16-bit mono
+            val buffer = ByteArray(3200)
             var userSpeakingRecently = false
             var silenceFramesCount = 0
             var bargeInFramesCount = 0
@@ -780,21 +775,18 @@ class GeminiLiveVoiceEngine(
                     val currentlySpeaking = _telemetry.value.operationalState == JarvisOperationalState.SPEAKING
 
                     if (currentlySpeaking) {
-                        // Echo control + Barge-in detection while JARVIS is speaking
                         if (currentSettings.bargeInEnabled && rmsAmp > 0.38f) {
                             bargeInFramesCount++
                             if (bargeInFramesCount >= 3) {
-                                // User is actively speaking over JARVIS -> Trigger Barge-In!
                                 bargeInFramesCount = 0
                                 interruptSpeech(
                                     returnToListening = true,
-                                    reason = "Barge-in detected — Listening to you"
+                                    reason = "Ruk gayi ji… aap boliye 💕"
                                 )
                             }
                         } else {
                             bargeInFramesCount = 0
                         }
-                        // If echo cancellation is active, we still stream or gate low-level echo
                         if (!currentSettings.echoControlEnabled || rmsAmp > 0.32f) {
                             sendPcmChunkOverWebSocket(chunkBytes)
                         }
@@ -809,20 +801,19 @@ class GeminiLiveVoiceEngine(
                                 updateTelemetry {
                                     it.copy(
                                         operationalState = JarvisOperationalState.LISTENING,
-                                        statusDetail = "Hearing your voice..."
+                                        statusDetail = "Haan ji… sun rahi hun…"
                                     )
                                 }
                             }
                         } else if (userSpeakingRecently) {
                             silenceFramesCount++
-                            // After ~900ms of silence following user speech -> show THINKING indicator
                             if (silenceFramesCount == 9) {
                                 userSpeakingRecently = false
                                 updateTelemetry {
                                     if (it.operationalState == JarvisOperationalState.LISTENING) {
                                         it.copy(
                                             operationalState = JarvisOperationalState.THINKING,
-                                            statusDetail = "End of speech detected — Gemini thinking..."
+                                            statusDetail = "Hmm… soch rahi hun ji…"
                                         )
                                     } else {
                                         it
@@ -933,6 +924,7 @@ class GeminiLiveVoiceEngine(
         return clean == "stop" ||
             clean == "jarvis stop" ||
             clean == "jarvis, stop" ||
+            clean == "jarvis chup" ||
             clean == "hey jarvis stop" ||
             clean.endsWith("jarvis stop")
     }

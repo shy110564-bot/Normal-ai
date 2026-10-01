@@ -1,11 +1,16 @@
 package com.example.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -37,6 +42,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -57,6 +63,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import com.example.data.preferences.JarvisSettings
 import com.example.domain.tools.PendingConfirmationAction
 import com.example.service.JarvisOperationalState
 import com.example.ui.theme.JarvisAmber
@@ -64,11 +72,13 @@ import com.example.ui.theme.JarvisArcBlue
 import com.example.ui.theme.JarvisBorderGlow
 import com.example.ui.theme.JarvisCrimson
 import com.example.ui.theme.JarvisCyan
-import com.example.ui.theme.JarvisDeepNavy
-import com.example.ui.theme.JarvisElectricViolet
 import com.example.ui.theme.JarvisEmerald
+import com.example.ui.theme.JarvisNeonGradient
 import com.example.ui.theme.JarvisObsidian
+import com.example.ui.theme.JarvisPink
+import com.example.ui.theme.JarvisPurple
 import com.example.ui.theme.JarvisSurfaceCard
+import com.example.ui.theme.JarvisSurfaceElevated
 import com.example.ui.theme.JarvisTextPrimary
 import com.example.ui.theme.JarvisTextSecondary
 import kotlin.math.cos
@@ -80,29 +90,33 @@ fun stateColor(state: JarvisOperationalState): Color {
         JarvisOperationalState.CONNECTING, JarvisOperationalState.RECONNECTING -> JarvisAmber
         JarvisOperationalState.CONNECTED -> JarvisEmerald
         JarvisOperationalState.LISTENING -> JarvisCyan
-        JarvisOperationalState.THINKING -> JarvisAmber
-        JarvisOperationalState.SPEAKING -> JarvisArcBlue
+        JarvisOperationalState.THINKING -> JarvisPurple
+        JarvisOperationalState.SPEAKING -> JarvisPink
         JarvisOperationalState.INTERRUPTED -> JarvisCrimson
-        JarvisOperationalState.OFFLINE -> JarvisElectricViolet
+        JarvisOperationalState.OFFLINE -> JarvisPurple
         JarvisOperationalState.ERROR -> JarvisCrimson
     }
 }
 
+/**
+ * 3D Glowing Neon Orb with 2 Rotating Neon Rings & Live Waveform Bars
+ * ("Neon Glass Future" Design System — Section 14)
+ */
 @Composable
 fun JarvisCoreVisualizer(
     operationalState: JarvisOperationalState,
     amplitude: Float,
     spectrumBands: List<Float>,
-    sizeDp: Dp = 190.dp,
+    sizeDp: Dp = 170.dp,
     onCoreClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val infiniteTransition = rememberInfiniteTransition(label = "jarvis_core_anim")
+    val infiniteTransition = rememberInfiniteTransition(label = "jarvis_orb_anim")
     val outerRotation by infiniteTransition.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 14000, easing = LinearEasing),
+            animation = tween(durationMillis = 10000, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "outer_rot"
@@ -111,27 +125,32 @@ fun JarvisCoreVisualizer(
         initialValue = 360f,
         targetValue = 0f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 8500, easing = LinearEasing),
+            animation = tween(durationMillis = 6500, easing = LinearEasing),
             repeatMode = RepeatMode.Restart
         ),
         label = "inner_rot"
     )
     val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.08f,
+        initialValue = 0.93f,
+        targetValue = 1.07f,
         animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 1200, easing = LinearEasing),
+            animation = tween(durationMillis = 1100, easing = LinearEasing),
             repeatMode = RepeatMode.Reverse
         ),
         label = "pulse_scale"
     )
 
     val primaryColor = stateColor(operationalState)
+    val secondaryColor = when (operationalState) {
+        JarvisOperationalState.THINKING -> JarvisCyan
+        JarvisOperationalState.SPEAKING -> JarvisPurple
+        else -> JarvisPink
+    }
     val activeBoost = when (operationalState) {
         JarvisOperationalState.LISTENING,
-        JarvisOperationalState.SPEAKING -> amplitude.coerceIn(0.05f, 1.0f)
+        JarvisOperationalState.SPEAKING -> amplitude.coerceIn(0.06f, 1.0f)
         JarvisOperationalState.THINKING -> 0.45f
-        else -> 0.08f
+        else -> 0.10f
     }
 
     Box(
@@ -146,12 +165,13 @@ fun JarvisCoreVisualizer(
             val center = Offset(size.width / 2f, size.height / 2f)
             val maxRadius = size.minDimension / 2f
 
-            // Ambient radial glow
+            // 1. 3D Aurora Radial Glow
             drawCircle(
                 brush = Brush.radialGradient(
                     colors = listOf(
-                        primaryColor.copy(alpha = 0.28f + activeBoost * 0.25f),
-                        primaryColor.copy(alpha = 0.06f),
+                        primaryColor.copy(alpha = 0.36f + activeBoost * 0.25f),
+                        JarvisPurple.copy(alpha = 0.18f),
+                        JarvisPink.copy(alpha = 0.06f),
                         Color.Transparent
                     ),
                     center = center,
@@ -161,43 +181,48 @@ fun JarvisCoreVisualizer(
                 center = center
             )
 
-            // Outer segmented tech ring
+            // 2. Outer Rotating Neon Ring (Cyan -> Purple -> Pink)
             rotate(degrees = outerRotation, pivot = center) {
                 val ringRadius = maxRadius * 0.90f
-                val arcSpan = 42f
+                val arcSpan = 46f
                 for (i in 0 until 6) {
+                    val ringColor = when (i % 3) {
+                        0 -> JarvisCyan
+                        1 -> JarvisPurple
+                        else -> JarvisPink
+                    }
                     drawArc(
-                        color = primaryColor.copy(alpha = 0.65f),
+                        color = ringColor.copy(alpha = 0.8f),
                         startAngle = i * 60f,
                         sweepAngle = arcSpan,
                         useCenter = false,
                         topLeft = Offset(center.x - ringRadius, center.y - ringRadius),
                         size = Size(ringRadius * 2, ringRadius * 2),
-                        style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round)
+                        style = Stroke(width = 3.2.dp.toPx(), cap = StrokeCap.Round)
                     )
                 }
             }
 
-            // Counter-rotating inner telemetry ring
+            // 3. Second Counter-Rotating Neon Ring
             rotate(degrees = innerRotation, pivot = center) {
                 val innerRadius = maxRadius * 0.74f
                 for (i in 0 until 12) {
                     drawArc(
-                        color = primaryColor.copy(alpha = 0.45f),
+                        color = secondaryColor.copy(alpha = 0.6f),
                         startAngle = i * 30f,
-                        sweepAngle = 14f,
+                        sweepAngle = 15f,
                         useCenter = false,
                         topLeft = Offset(center.x - innerRadius, center.y - innerRadius),
                         size = Size(innerRadius * 2, innerRadius * 2),
-                        style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Butt)
+                        style = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
                     )
                 }
             }
 
-            // Radial spectrum bars around the core
+            // 4. Live Voice Waveform Bars around the 3D Orb
             val bandCount = spectrumBands.size.coerceAtLeast(1)
-            val baseBarRadius = maxRadius * 0.46f
-            val maxBarLength = maxRadius * 0.24f
+            val baseBarRadius = maxRadius * 0.45f
+            val maxBarLength = maxRadius * 0.25f
             for (i in 0 until bandCount) {
                 val angleRad = Math.toRadians((i * (360.0 / bandCount)) - 90.0)
                 val bandVal = spectrumBands[i].coerceIn(0.05f, 1.0f)
@@ -208,7 +233,7 @@ fun JarvisCoreVisualizer(
                 val endY = center.y + ((baseBarRadius + barLen) * sin(angleRad)).toFloat()
 
                 drawLine(
-                    color = primaryColor.copy(alpha = 0.85f),
+                    color = if (i % 2 == 0) primaryColor else JarvisPink.copy(alpha = 0.85f),
                     start = Offset(startX, startY),
                     end = Offset(endX, endY),
                     strokeWidth = 3.5.dp.toPx(),
@@ -216,15 +241,22 @@ fun JarvisCoreVisualizer(
                 )
             }
 
-            // Core nucleus circle
-            val nucleusRadius = maxRadius * 0.36f * (if (operationalState == JarvisOperationalState.THINKING) pulseScale else (1f + activeBoost * 0.18f))
+            // 5. Inner 3D Glowing Sphere Nucleus
+            val nucleusRadius = maxRadius * 0.37f * pulseScale * (1f + activeBoost * 0.14f)
             drawCircle(
-                color = JarvisObsidian.copy(alpha = 0.9f),
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        primaryColor.copy(alpha = 0.45f),
+                        JarvisObsidian.copy(alpha = 0.95f)
+                    ),
+                    center = Offset(center.x - nucleusRadius * 0.2f, center.y - nucleusRadius * 0.2f),
+                    radius = nucleusRadius * 1.2f
+                ),
                 radius = nucleusRadius,
                 center = center
             )
             drawCircle(
-                color = primaryColor,
+                brush = JarvisNeonGradient,
                 radius = nucleusRadius,
                 center = center,
                 style = Stroke(width = 2.5.dp.toPx())
@@ -246,13 +278,150 @@ fun JarvisCoreVisualizer(
                 tint = primaryColor,
                 modifier = Modifier.size(28.dp)
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(3.dp))
             Text(
                 text = operationalState.badgeText,
                 style = MaterialTheme.typography.labelMedium,
-                color = primaryColor,
+                color = JarvisTextPrimary,
                 fontWeight = FontWeight.Bold
             )
+        }
+    }
+}
+
+/**
+ * Screen 1: Animated Neon Glass Splash Screen ("Crafted by AK EXPLOITS")
+ */
+@Composable
+fun JarvisSplashOverlay(
+    visible: Boolean,
+    onDismiss: () -> Unit
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(tween(300)),
+        exit = fadeOut(tween(500))
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(JarvisObsidian)
+                .clickable(onClick = onDismiss)
+                .testTag("jarvis_splash_screen"),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+                modifier = Modifier.padding(24.dp)
+            ) {
+                JarvisCoreVisualizer(
+                    operationalState = JarvisOperationalState.LISTENING,
+                    amplitude = 0.65f,
+                    spectrumBands = List(16) { 0.4f + (it % 4) * 0.15f },
+                    sizeDp = 200.dp,
+                    onCoreClick = onDismiss
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = "J.A.R.V.I.S.",
+                    style = MaterialTheme.typography.displayLarge.copy(
+                        brush = JarvisNeonGradient,
+                        fontSize = 42.sp
+                    ),
+                    fontWeight = FontWeight.ExtraBold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Ji… boliye, main sun rahi hun 💕",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = JarvisCyan
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Surface(
+                    color = JarvisSurfaceElevated,
+                    shape = RoundedCornerShape(50),
+                    border = BorderStroke(1.dp, JarvisPurple)
+                ) {
+                    Text(
+                        text = "🎨 Crafted by ${JarvisSettings.CREATOR_NAME} • v${JarvisSettings.APP_VERSION}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = JarvisTextPrimary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Screen 9: Slide-Down Neon Glass Notification Overlay Banner
+ */
+@Composable
+fun JarvisNotificationOverlayBanner(
+    visible: Boolean,
+    message: String,
+    onTalkNow: () -> Unit,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    AnimatedVisibility(
+        visible = visible,
+        enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
+        exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut(),
+        modifier = modifier
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 8.dp)
+                .border(1.5.dp, JarvisNeonGradient, RoundedCornerShape(20.dp))
+                .testTag("jarvis_notification_overlay"),
+            colors = CardDefaults.cardColors(containerColor = JarvisSurfaceElevated.copy(alpha = 0.96f)),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "◉ JARVIS",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = JarvisCyan,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        HudStatusBadge(label = "LIVE CARE", color = JarvisPink)
+                    }
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = message,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = JarvisTextPrimary
+                    )
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        onClick = onTalkNow,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = JarvisCyan,
+                            contentColor = JarvisObsidian
+                        ),
+                        shape = RoundedCornerShape(50)
+                    ) {
+                        Text("Bolo 💕", fontWeight = FontWeight.Bold)
+                    }
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close", tint = JarvisTextSecondary)
+                    }
+                }
+            }
         }
     }
 }
@@ -267,7 +436,7 @@ fun HudStatusBadge(
         modifier = modifier,
         color = color.copy(alpha = 0.14f),
         shape = RoundedCornerShape(50),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.55f))
+        border = BorderStroke(1.dp, color.copy(alpha = 0.6f))
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -339,7 +508,7 @@ fun PendingConfirmationBanner(
                 ) {
                     Icon(Icons.Default.Close, contentDescription = "Cancel", modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Cancel")
+                    Text("Rehne Do")
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Button(
@@ -352,7 +521,7 @@ fun PendingConfirmationBanner(
                 ) {
                     Icon(Icons.Default.CheckCircle, contentDescription = "Confirm", modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Confirm & Execute", fontWeight = FontWeight.Bold)
+                    Text("Haan Ji, Karo ✅", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -383,10 +552,10 @@ fun HudSectionHeader(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(1.dp)
+                .height(1.5.dp)
                 .background(
                     Brush.horizontalGradient(
-                        listOf(JarvisCyan.copy(alpha = 0.6f), JarvisBorderGlow, Color.Transparent)
+                        listOf(JarvisCyan, JarvisPurple, JarvisPink, Color.Transparent)
                     )
                 )
         )

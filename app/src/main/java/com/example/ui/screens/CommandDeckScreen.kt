@@ -31,6 +31,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
@@ -42,6 +43,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -58,7 +61,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -66,6 +68,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.local.ChatMessageEntity
+import com.example.data.preferences.GirlMood
 import com.example.data.preferences.JarvisSettings
 import com.example.data.security.ApiKeyStatus
 import com.example.domain.tools.PendingConfirmationAction
@@ -101,6 +104,7 @@ fun CommandDeckScreen(
     wakeWordState: WakeWordState,
     wakeMicRms: Float,
     isBrainThinking: Boolean,
+    isTorchOn: Boolean,
     currentActivityLabel: String,
     errorBanner: String?,
     hasFailedCommandToRetry: Boolean,
@@ -111,6 +115,9 @@ fun CommandDeckScreen(
     onToggleContinuousVoice: () -> Unit,
     onLaunchCallingMode: () -> Unit,
     onStopInterrupt: () -> Unit,
+    onSelectMood: (GirlMood) -> Unit,
+    onToggleTorch: () -> Unit,
+    onOpenCreatorChannel: (String) -> Unit,
     onSendMessage: (String) -> Unit,
     onClearChat: () -> Unit,
     onRetryFailedCommand: () -> Unit,
@@ -140,16 +147,16 @@ fun CommandDeckScreen(
         modifier = modifier
             .fillMaxSize()
             .background(JarvisObsidian)
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
             .testTag("command_deck_screen")
     ) {
-        // 1. TOP FUTURISTIC JARVIS HUD HEADER
+        // 1. TOP FUTURISTIC JARVIS v5.0 HUD HEADER (WITH AK EXPLOITS IDENTITY & MOOD)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "J.A.R.V.I.S.",
@@ -163,21 +170,37 @@ fun CommandDeckScreen(
                     )
                 }
                 Text(
-                    text = "GEMINI CORE • ${settings.personalityMode.displayName.uppercase()} MODE",
+                    text = "v5.0 BY AK EXPLOITS • ${settings.currentMood.emoji} ${settings.currentMood.title.uppercase()} • ${settings.personalityMode.displayName.uppercase()}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = JarvisTextSecondary
+                    color = JarvisTextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = onToggleTorch,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .testTag("header_torch_btn")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FlashlightOn,
+                        contentDescription = "Toggle Torch",
+                        tint = if (isTorchOn) JarvisAmber else JarvisTextSecondary
+                    )
+                }
                 HudStatusBadge(
                     label = if (keyStatus.isConfigured) "AI READY" else "SETUP KEY",
                     color = if (keyStatus.isConfigured) JarvisEmerald else JarvisAmber,
-                    modifier = Modifier.padding(end = 6.dp)
+                    modifier = Modifier.padding(horizontal = 4.dp)
                 )
                 IconButton(
                     onClick = onOpenSettings,
-                    modifier = Modifier.testTag("header_settings_btn")
+                    modifier = Modifier
+                        .size(36.dp)
+                        .testTag("header_settings_btn")
                 ) {
                     Icon(
                         imageVector = Icons.Default.Settings,
@@ -188,7 +211,7 @@ fun CommandDeckScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // 2. CURRENT ACTIVITY & CONNECTION TELEMETRY STRIP
         Surface(
@@ -200,7 +223,7 @@ fun CommandDeckScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                    .padding(horizontal = 12.dp, vertical = 5.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -214,9 +237,9 @@ fun CommandDeckScreen(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = if (settings.wakeWordEnabled) "WAKE: '${settings.selectedWakePhrase}'" else "WAKE: OFF",
+                    text = if (settings.wakeWordEnabled) "WAKE: '${settings.selectedWakePhrase}'" else "VOICE: ${settings.selectedVoiceName}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (settings.wakeWordEnabled) JarvisEmerald else JarvisTextMuted
+                    color = if (settings.wakeWordEnabled) JarvisEmerald else JarvisTextSecondary
                 )
             }
         }
@@ -234,7 +257,7 @@ fun CommandDeckScreen(
 
         // 3. PENDING SENSITIVE ACTION CONFIRMATION BANNER
         if (pendingConfirmation != null) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             PendingConfirmationBanner(
                 action = pendingConfirmation,
                 onConfirm = onConfirmPendingAction,
@@ -244,7 +267,7 @@ fun CommandDeckScreen(
 
         // 4. OFFLINE / ERROR RECOVERY BANNER
         if (!errorBanner.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Card(
                 colors = CardDefaults.cardColors(containerColor = JarvisCrimson.copy(alpha = 0.16f)),
                 border = BorderStroke(1.dp, JarvisCrimson),
@@ -298,7 +321,7 @@ fun CommandDeckScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
         // 5. CENTRAL HOLOGRAPHIC VOICE VISUALIZER & CALLING / CONTINUOUS MIC CONTROLS
         Card(
@@ -310,7 +333,7 @@ fun CommandDeckScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -318,7 +341,7 @@ fun CommandDeckScreen(
                     operationalState = operationalState,
                     amplitude = effectiveAmplitude,
                     spectrumBands = liveTelemetry.spectrumBands,
-                    sizeDp = 112.dp,
+                    sizeDp = 104.dp,
                     onCoreClick = {
                         if (!hasMicPermission) {
                             onRequestMicPermission()
@@ -332,7 +355,7 @@ fun CommandDeckScreen(
 
                 Column(
                     modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     Text(
                         text = operationalState.subtitle,
@@ -343,7 +366,7 @@ fun CommandDeckScreen(
 
                     if (wakeWordState.lastDetectedTranscript.isNotBlank()) {
                         Text(
-                            text = "Heard: \"${wakeWordState.lastDetectedTranscript}\"",
+                            text = "Sun rahi hun: \"${wakeWordState.lastDetectedTranscript}\"",
                             style = MaterialTheme.typography.labelSmall,
                             color = JarvisCyan,
                             maxLines = 1,
@@ -372,7 +395,7 @@ fun CommandDeckScreen(
                             Icon(Icons.Default.Mic, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                text = if (wakeWordState.isContinuousCommandSession) "Listening" else "Voice Loop",
+                                text = if (wakeWordState.isContinuousCommandSession) "Listening" else "Sun Na Ji",
                                 style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold
                             )
@@ -411,50 +434,95 @@ fun CommandDeckScreen(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(34.dp)
+                                .height(32.dp)
                                 .testTag("main_stop_interrupt_btn")
                         ) {
                             Icon(Icons.Default.Stop, contentDescription = "Stop", tint = JarvisCrimson, modifier = Modifier.size(14.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("JARVIS, STOP", color = JarvisCrimson, style = MaterialTheme.typography.labelSmall)
+                            Text("JARVIS CHUP / STOP", color = JarvisCrimson, style = MaterialTheme.typography.labelSmall)
                         }
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(5.dp))
 
-        // 6. QUICK ACTIONS BAR
+        // 6. 12 EMOTIONAL GIRL MOODS SELECTOR STRIP (SECTION 8 & 13)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            GirlMood.entries.forEach { mood ->
+                val selected = settings.currentMood == mood
+                FilterChip(
+                    selected = selected,
+                    onClick = { onSelectMood(mood) },
+                    label = {
+                        Text(
+                            text = "${mood.emoji} ${mood.title}",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = JarvisCyan.copy(alpha = 0.22f),
+                        selectedLabelColor = JarvisCyan,
+                        containerColor = JarvisSurfaceCard,
+                        labelColor = JarvisTextSecondary
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        enabled = true,
+                        selected = selected,
+                        borderColor = if (selected) JarvisCyan else JarvisBorderGlow
+                    ),
+                    modifier = Modifier.testTag("mood_chip_${mood.name.lowercase()}")
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // 7. QUICK COMMANDS & CREATOR SHORTCUTS BAR
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            QuickCommandChip("Open YouTube & Search AI") {
-                onSendMessage("JARVIS, open YouTube and search for Android AI tutorials")
+            QuickCommandChip("👑 Tumhe Kaun Banaya?") {
+                onSendMessage("JARVIS, tumhe kaun banaya?")
             }
-            QuickCommandChip("Create a Note") {
-                onSendMessage("JARVIS, create a note titled 'Project Ideas' saying 'Build modular Gemini Live voice tools'")
+            QuickCommandChip("📲 AK EXPLOITS Telegram") {
+                onOpenCreatorChannel("TELEGRAM")
             }
-            QuickCommandChip("Remember Preference") {
-                onSendMessage("JARVIS, remember that I prefer concise technical summaries")
+            QuickCommandChip("▶️ AK EXPLOITS YouTube") {
+                onOpenCreatorChannel("YOUTUBE")
             }
-            QuickCommandChip("Read Screen") {
-                onSendMessage("JARVIS, read the current screen and tell me what buttons are visible")
+            QuickCommandChip("🎶 Play Arijit Singh") {
+                onSendMessage("JARVIS, YouTube kholo aur Arijit Singh songs search karo")
             }
-            QuickCommandChip("Send Message Demo") {
-                onSendMessage("JARVIS, send Rahul a message saying I'm coming home")
+            QuickCommandChip("😘 Romantic Mode") {
+                onSelectMood(GirlMood.ROMANTIC)
+                onSendMessage("Jaan, sun na… aaj kaisa din raha?")
             }
-            QuickCommandChip("Device Status") {
-                onSendMessage("JARVIS, check my battery level, audio volume, and system status")
+            QuickCommandChip("😤 Nakhre Mode") {
+                onSelectMood(GirlMood.ANGRY)
+                onSendMessage("Oye JARVIS, gussa ho kya?")
+            }
+            QuickCommandChip("📝 Note Likho") {
+                onSendMessage("JARVIS, note likho 'Important Idea' — kal subah workout aur coding karni hai")
+            }
+            QuickCommandChip("👁️ Screen Padho") {
+                onSendMessage("JARVIS, screen pe kya dikh raha hai padho")
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(5.dp))
 
-        // 7. NORMAL TEXT CHAT AREA (INDEPENDENT FROM CALLING MODE)
+        // 8. NORMAL TEXT CHAT AREA (INDEPENDENT FROM CALLING MODE)
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -474,7 +542,7 @@ fun CommandDeckScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "CONVERSATION LOG (${chatMessages.size})",
+                        text = "BAATEIN LOG (${chatMessages.size} • 50-TURN MEMORY)",
                         style = MaterialTheme.typography.labelLarge,
                         color = JarvisCyan
                     )
@@ -516,9 +584,9 @@ fun CommandDeckScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(6.dp))
 
-        // 8. TEXT CHAT COMPOSER BAR
+        // 9. TEXT CHAT COMPOSER BAR
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -529,7 +597,7 @@ fun CommandDeckScreen(
                 onValueChange = { textInput = it },
                 placeholder = {
                     Text(
-                        text = "Command JARVIS or ask anything...",
+                        text = "Ji… kuch boliye ya command dijiye 💕",
                         color = JarvisTextMuted
                     )
                 },
@@ -654,9 +722,9 @@ private fun ChatBubbleItem(
                 ) {
                     Text(
                         text = when {
-                            isUser -> if (message.isVoice) "YOU (VOICE)" else "YOU"
+                            isUser -> if (message.isVoice) "AAP (VOICE)" else "AAP"
                             isSystem -> "SYSTEM ALERT"
-                            else -> "J.A.R.V.I.S."
+                            else -> "JARVIS 💕"
                         },
                         style = MaterialTheme.typography.labelSmall,
                         color = when {
@@ -668,7 +736,7 @@ private fun ChatBubbleItem(
                     )
                     if (!message.toolName.isNullOrBlank()) {
                         HudStatusBadge(
-                            label = "TOOL: ${message.toolName.uppercase()}",
+                            label = "ACTION: ${message.toolName.uppercase()}",
                             color = JarvisAmber
                         )
                     }
