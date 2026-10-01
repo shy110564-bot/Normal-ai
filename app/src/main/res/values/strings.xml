@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">JARVIS</string>
+    <string name="accessibility_service_label">JARVIS Screen Intelligence &amp; Control</string>
+    <string name="accessibility_service_description">Allows JARVIS to read visible screen text, identify UI elements (buttons, text fields, lists), and perform user-requested screen actions such as tapping, typing, scrolling, and navigating apps.</string>
+    <string name="notification_listener_label">JARVIS Notification Reader</string>
+    <string name="security_warning_apk">Security Warning: API keys configured via BuildConfig or local prototyping storage are packaged for this device session. Android APKs can be decompiled; do not share this APK publicly if it contains a personal API key. For public production deployment, use an ephemeral token backend proxy.</string>
+</resources>
